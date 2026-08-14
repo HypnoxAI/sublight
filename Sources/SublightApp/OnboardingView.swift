@@ -57,6 +57,8 @@ struct OnboardingView: View {
                     .frame(width: 6, height: 6)
             }
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Page \(page + 1) of 3")
     }
 
     @ViewBuilder

@@ -79,6 +79,8 @@ struct SublightApp: App {
             // One Image view, always. Only its opacity varies with state.
             Image(nsImage: Self.menuBarIcon)
                 .opacity(state.isEnabled ? 1.0 : 0.55)
+                .accessibilityLabel("Sublight")
+                .accessibilityValue(state.isEnabled ? "dimming" : "idle")
         }
         .menuBarExtraStyle(.window)
 

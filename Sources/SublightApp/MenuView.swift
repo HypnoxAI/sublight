@@ -49,6 +49,7 @@ struct MenuView: View {
                         .foregroundStyle(state.isEnabled ? Color.green : Color.secondary)
                 }
             }
+            .accessibilityElement(children: .combine)
             Spacer()
             if state.available && state.acknowledged {
                 Button {
@@ -58,6 +59,7 @@ struct MenuView: View {
                 }
                 .buttonStyle(.borderless)
                 .controlSize(.small)
+                .accessibilityLabel("Settings")
             }
         }
     }
@@ -124,6 +126,7 @@ struct MenuView: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
+            .accessibilityLabel("Mode")
 
             Divider()
 
@@ -148,6 +151,7 @@ struct MenuView: View {
     private var simpleControls: some View {
         VStack(alignment: .leading, spacing: 9) {
             Toggle("Dim keyboard below minimum", isOn: $state.isEnabled)
+                .accessibilityHint("Dims the built-in backlight below the system's lowest setting.")
             if state.isEnabled { brightnessSlider }
             Text("Dims the built-in backlight below the system's lowest setting.")
                 .font(.caption2).foregroundStyle(.tertiary)
@@ -158,6 +162,7 @@ struct MenuView: View {
     private var advancedControls: some View {
         VStack(alignment: .leading, spacing: 9) {
             Toggle("Dim keyboard", isOn: $state.isEnabled)
+                .accessibilityHint("Dims the backlight below the system minimum at the chosen frequency.")
 
             if state.isEnabled {
                 HStack {
@@ -166,14 +171,19 @@ struct MenuView: View {
                     Text(String(format: "%.1f Hz", state.frequencyHz))
                         .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                 }
+                .accessibilityElement(children: .combine)
                 HStack(spacing: 6) {
                     ForEach(AppState.presets, id: \.hz) { preset in
                         Button(preset.label) { state.setPreset(preset.hz) }
                             .buttonStyle(.bordered)
                             .controlSize(.small)
+                            .accessibilityLabel("\(preset.label) preset")
+                            .accessibilityHint("Sets the frequency to \(Int(preset.hz)) hertz.")
                     }
                 }
                 Slider(value: $state.frequencyHz, in: AppState.freqMin...AppState.freqMax, step: 0.5)
+                    .accessibilityLabel("Frequency")
+                    .accessibilityValue(String(format: "%.1f hertz", state.frequencyHz))
                 Text(state.associationText)
                     .font(.caption2).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -187,6 +197,7 @@ struct MenuView: View {
     private var scheduleSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Toggle("Schedule", isOn: $state.scheduleEnabled)
+                .accessibilityHint("Dims automatically during the selected hours.")
 
             if state.scheduleEnabled {
                 Picker("", selection: $state.scheduleMode) {
@@ -196,6 +207,7 @@ struct MenuView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
+                .accessibilityLabel("Schedule type")
 
                 if state.scheduleMode == .fixed {
                     fixedTimeRows
@@ -210,7 +222,10 @@ struct MenuView: View {
                         Text(String(format: "%.1f Hz", state.scheduleFrequency))
                             .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                     }
+                    .accessibilityElement(children: .combine)
                     Slider(value: $state.scheduleFrequency, in: AppState.freqMin...AppState.freqMax, step: 0.5)
+                        .accessibilityLabel("Schedule frequency")
+                        .accessibilityValue(String(format: "%.1f hertz", state.scheduleFrequency))
                 }
 
                 Text("Dims automatically during these hours. You can still switch it on or off by hand at any time.")
@@ -226,11 +241,13 @@ struct MenuView: View {
                 Text("From").font(.caption).foregroundStyle(.secondary).frame(width: 44, alignment: .leading)
                 DatePicker("", selection: Binding(get: { state.scheduleStartDate }, set: { state.scheduleStartDate = $0 }),
                            displayedComponents: .hourAndMinute).labelsHidden()
+                    .accessibilityLabel("Dim from")
             }
             HStack {
                 Text("To").font(.caption).foregroundStyle(.secondary).frame(width: 44, alignment: .leading)
                 DatePicker("", selection: Binding(get: { state.scheduleEndDate }, set: { state.scheduleEndDate = $0 }),
                            displayedComponents: .hourAndMinute).labelsHidden()
+                    .accessibilityLabel("Dim until")
             }
         }
     }
@@ -245,6 +262,8 @@ struct MenuView: View {
                 Spacer()
                 Button("Set…") { showSettings() }
                     .buttonStyle(.bordered).controlSize(.small)
+                    .accessibilityLabel("Set location")
+                    .accessibilityHint("Opens Settings, where the location is chosen.")
             }
         } else if let times = state.solarTimes {
             switch times.condition {
@@ -256,6 +275,8 @@ struct MenuView: View {
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Sunset \(Self.time(times.sunset)), sunrise \(Self.time(times.sunrise))")
             case .polarDay:
                 Text("The sun doesn't set at your location today — the schedule stays off.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -282,14 +303,17 @@ struct MenuView: View {
         HStack(spacing: 7) {
             Image(systemName: "slider.horizontal.3")
                 .foregroundStyle(.orange)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 1) {
                 Text("Not calibrated for this Mac").font(.caption)
                 Text("Takes about a minute").font(.caption2).foregroundStyle(.tertiary)
             }
+            .accessibilityElement(children: .combine)
             Spacer()
             Button { showSettings() } label: { Text("Calibrate").font(.caption) }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
+                .accessibilityHint("Opens Settings, where calibration runs.")
         }
     }
 
@@ -311,8 +335,12 @@ struct MenuView: View {
     private var brightnessSlider: some View {
         HStack(spacing: 8) {
             Image(systemName: "sun.min").foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             Slider(value: $state.brightness, in: 0...1)
+                .accessibilityLabel("Brightness")
+                .accessibilityValue("\(Int((state.brightness * 100).rounded())) percent")
             Image(systemName: "sun.max").foregroundStyle(.secondary)
+                .accessibilityHidden(true)
         }
     }
 }

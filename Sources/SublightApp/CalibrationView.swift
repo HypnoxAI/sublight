@@ -52,6 +52,7 @@ struct CalibrationView: View {
             if cal.step != .intro && cal.step != .summary {
                 ProgressView(value: cal.progress)
                     .progressViewStyle(.linear)
+                    .accessibilityLabel("Calibration progress")
             }
         }
     }
@@ -119,13 +120,16 @@ struct CalibrationView: View {
             HStack(spacing: 10) {
                 Button("It flickers") { cal.answerFloor(flickered: true) }
                     .disabled(cal.isPlaying)
+                    .accessibilityHint("Answer that the backlight visibly changed.")
                 Button("Completely steady") { cal.answerFloor(flickered: false) }
                     .disabled(cal.isPlaying)
+                    .accessibilityHint("Answer that the backlight did not change at all.")
             }
 
             Button("Play again") { cal.playFloorComparison() }
                 .buttonStyle(.borderless).controlSize(.small)
                 .disabled(cal.isPlaying)
+                .accessibilityHint("Repeats the two-level comparison on the keyboard.")
 
             Text("Question \(cal.round + 1) of \(CalibrationController.rounds)")
                 .font(.caption2).foregroundStyle(.tertiary)
@@ -142,11 +146,14 @@ struct CalibrationView: View {
 
             HStack(spacing: 10) {
                 Button("Looks steady") { cal.answerFrequency(steady: true) }
+                    .accessibilityHint("Answer that the dimmed backlight looks steady.")
                 Button("I can see it pulsing") { cal.answerFrequency(steady: false) }
+                    .accessibilityHint("Answer that the backlight is visibly pulsing.")
             }
 
             Button("Play again") { cal.playFrequency() }
                 .buttonStyle(.borderless).controlSize(.small)
+                .accessibilityHint("Repeats the flicker test on the keyboard.")
 
             Text("Question \(cal.round + 1) of \(CalibrationController.rounds)")
                 .font(.caption2).foregroundStyle(.tertiary)
@@ -161,9 +168,13 @@ struct CalibrationView: View {
 
             HStack(spacing: 8) {
                 Image(systemName: "sun.min").foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
                 Slider(value: $cal.previewLevel, in: 0.1...0.95)
                     .onChange(of: cal.previewLevel) { _, _ in cal.applyPreview() }
+                    .accessibilityLabel("Preferred brightness")
+                    .accessibilityValue("\(Int((cal.previewLevel * 100).rounded())) percent")
                 Image(systemName: "sun.max").foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
             }
 
             Text("This becomes your default brightness.")
@@ -220,5 +231,6 @@ struct CalibrationView: View {
             }
         }
         .frame(height: 18)
+        .accessibilityElement(children: .combine)
     }
 }

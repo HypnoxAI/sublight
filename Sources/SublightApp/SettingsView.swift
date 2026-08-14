@@ -70,6 +70,7 @@ private struct GeneralTab: View {
                     }
                     .labelsHidden()
                     .frame(width: 210)
+                    .accessibilityLabel("Location")
                 } label: {
                     Text("Location")
                     Text(locationSubtitle)
@@ -87,11 +88,13 @@ private struct GeneralTab: View {
                             .frame(width: 78)
                             .multilineTextAlignment(.trailing)
                             .disabled(state.selectedCity != nil)
+                            .accessibilityLabel("Latitude")
                         TextField("Lon", value: $state.longitude,
                                   format: .number.precision(.fractionLength(0...4)))
                             .frame(width: 78)
                             .multilineTextAlignment(.trailing)
                             .disabled(state.selectedCity != nil)
+                            .accessibilityLabel("Longitude")
                     }
                     .textFieldStyle(.roundedBorder)
                 } label: {
@@ -112,6 +115,7 @@ private struct GeneralTab: View {
                     }
                     .labelsHidden()
                     .frame(width: 110)
+                    .accessibilityLabel("Global shortcut")
                 } label: {
                     Text("Global shortcut")
                     Text(state.hotKeyConflict
@@ -128,6 +132,7 @@ private struct GeneralTab: View {
                         showCalibration = true
                     }
                     .disabled(state.controller == nil)
+                    .accessibilityHint("Runs the guided calibration for this Mac. Takes about a minute.")
                 } label: {
                     Text("Calibrate for this Mac")
                     Text(calibrationSubtitle)
@@ -139,6 +144,8 @@ private struct GeneralTab: View {
             Section {
                 LabeledContent {
                     Button("Reset…") { state.resetToDefaults() }
+                        .accessibilityLabel("Reset to defaults")
+                        .accessibilityHint("Clears saved settings and shows the setup screen again.")
                 } label: {
                     Text("Reset to defaults")
                     Text("Clears saved settings and shows the setup screen again. Your Launch-at-login choice is left unchanged.")
@@ -211,6 +218,7 @@ private struct SafetyTab: View {
             Section {
                 LabeledContent {
                     Button("Show again…") { state.showAcknowledgmentAgain() }
+                        .accessibilityLabel("Show the safety warning again")
                 } label: {
                     Text("Acknowledgment")
                     Text(state.acknowledged ? "You've accepted the safety warning." : "Not yet accepted.")
@@ -277,6 +285,7 @@ private struct DiagnosticsTab: View {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) { copied = false }
                 }
                 .disabled(copied)
+                .accessibilityLabel(copied ? "Copied" : "Copy diagnostics report")
             }
         }
         .padding(18)
@@ -297,6 +306,7 @@ private struct AboutTab: View {
                 .resizable()
                 .frame(width: 72, height: 72)
                 .padding(.top, 18)
+                .accessibilityHidden(true)
 
             Text("Sublight").font(.title2).bold()
             Text("Version \(Self.version)")
