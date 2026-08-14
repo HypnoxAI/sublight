@@ -361,6 +361,12 @@ case "set":
         exit(1)
     }
     guard let c = makeController(args: args) else { exit(2) }
+    // `set` does not touch auto-brightness, and the ambient light sensor can
+    // override a commanded value within milliseconds — silently invalidating
+    // a visual measurement.
+    if c.bridge.isAutoBrightnessEnabled(c.keyboardID) == true {
+        fputs("warning: auto-brightness is ON — the ambient light sensor may override this value within milliseconds; run 'auto off' first for visual tests\n", stderr)
+    }
     let ok = c.bridge.setBrightness(value, c.keyboardID)
     Thread.sleep(forTimeInterval: 0.5) // let the fade land
     let after = c.reportedBrightness().map { String(format: "%.4f", $0) } ?? "?"
