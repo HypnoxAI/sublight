@@ -1,0 +1,18 @@
+Sublight
+Copyright 2026 Hypnox Technologies LLC
+
+This product is developed and maintained by Hypnox Technologies LLC.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not
+use this software except in compliance with the License. A copy of the License
+is included in the LICENSE file and is also available at:
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+---
+
+SAFETY NOTICE: Sublight dims the keyboard backlight by rapidly modulating it,
+which produces flicker in a frequency range that can trigger seizures in people
+with photosensitive epilepsy. See DISCLAIMER and docs/APPSTORE_AND_HEALTH.md.
+Any effect on mood or focus is unproven. This software uses undocumented Apple
+interfaces and is provided on an "AS IS" basis without warranty of any kind.

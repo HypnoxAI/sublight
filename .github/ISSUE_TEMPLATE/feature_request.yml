@@ -1,0 +1,23 @@
+name: Feature request
+description: Suggest an improvement
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Worth checking docs/ROADMAP.md first — including the **permanent
+        non-goals**: no network calls or telemetry of any kind (which rules out
+        auto-update), no Intel support, no per-key effects, no Mac App Store,
+        and no health claims. Requests inside those lines won't be accepted,
+        however well made.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you're trying to do that Sublight doesn't let you do.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behaviour

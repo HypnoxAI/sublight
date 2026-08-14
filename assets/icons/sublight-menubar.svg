@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 80" width="96" height="80">
+  <!-- Sublight menu-bar glyph. Keyboard plate, three rows plus spacebar, and a
+       true sine — crest, trough, crest, amplitudes in golden-ratio proportion
+       around a rising midline — knocked through as a channel. (An earlier
+       version used three same-direction humps, which read as a cloud outline.)
+       Rules if you edit:
+         1. NO nested masks — they render empty in rsvg-convert.
+         2. Rasterise to PNG, never PDF: PDF soft-masks don't render in
+            NSImage, which yields an invisible icon.
+         3. Keep it close to square and light; heavy glyphs look wrong beside
+            macOS's own status icons. -->
+  <mask id="g" maskUnits="userSpaceOnUse" x="0" y="0" width="96" height="80">
+    <rect x="1" y="6" width="94" height="68" rx="12" fill="#fff"/>
+    <rect x="7"  y="15" width="26" height="14" rx="3.5" fill="#000"/>
+    <rect x="34" y="15" width="26" height="14" rx="3.5" fill="#000"/>
+    <rect x="61" y="15" width="26" height="14" rx="3.5" fill="#000"/>
+    <rect x="7"  y="34" width="26" height="14" rx="3.5" fill="#000"/>
+    <rect x="34" y="34" width="26" height="14" rx="3.5" fill="#000"/>
+    <rect x="61" y="34" width="26" height="14" rx="3.5" fill="#000"/>
+    <rect x="7"  y="53" width="26" height="14" rx="3.5" fill="#000"/>
+    <rect x="34" y="53" width="53" height="14" rx="3.5" fill="#000"/>
+    <path d="M -2,56 C 4,52.8 9,49.5 16,49.5 C 28,49.5 40,55.5 52,55.5 C 64,55.5 76,34.5 88,34.5 C 94,34.5 100,38 106,44" fill="none" stroke="#000" stroke-width="5.5" stroke-linecap="round"/>
+  </mask>
+  <rect width="96" height="80" fill="#000000" mask="url(#g)"/>
+</svg>

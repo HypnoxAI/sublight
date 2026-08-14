@@ -1,0 +1,48 @@
+name: Hardware report
+description: Add your Mac to the compatibility table — works or not
+labels: [hardware-report]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Every model behaves a little differently — floor, coalescing ceiling,
+        usable band. These reports become the README compatibility table and
+        eventually better shipped defaults. Two minutes, genuinely useful.
+  - type: input
+    id: model
+    attributes:
+      label: Model identifier
+      description: "Shown in Settings → About (e.g. Mac16,12)"
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+    validations:
+      required: true
+  - type: input
+    id: floor
+    attributes:
+      label: Measured floor
+      description: "Settings → Diagnostics after calibrating (e.g. 0.0625)"
+  - type: input
+    id: hz
+    attributes:
+      label: Flicker-free frequency
+      description: "From calibration (e.g. 9.0 Hz)"
+  - type: dropdown
+    id: works
+    attributes:
+      label: Does sub-floor dimming visibly work?
+      options:
+        - "Yes — clearly dimmer than the system minimum"
+        - "Partially — dims, but with issues (describe below)"
+        - "No — no visible difference"
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Anything odd — pulsing, jitter, sleep/wake behaviour, external display setups.

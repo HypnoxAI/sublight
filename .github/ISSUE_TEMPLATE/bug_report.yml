@@ -1,0 +1,40 @@
+name: Bug report
+description: Something misbehaves, fails to build, or doesn't dim
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Sublight drives an undocumented Apple framework across hardware that
+        genuinely differs machine to machine, so the Diagnostics block below is
+        not optional boilerplate — it is usually the whole diagnosis.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got.
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: "Sublight menu → gear → Diagnostics → Copy, then paste here. Your coordinates are never included."
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: probes
+    attributes:
+      label: CLI probe output (for engine/hardware issues)
+      description: "If dimming misbehaves: paste `sublight-cli dump` and `sublight-cli sig` output."
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before filing
+      options:
+        - label: I ran the guided calibration (Settings → General) — or the bug is that calibration itself fails
+          required: false
+        - label: This is an Apple Silicon MacBook with a built-in backlit keyboard
+          required: true

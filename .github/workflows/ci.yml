@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    # macOS runner: the package builds and the pure-logic tests (solar math,
+    # schedule windows, city table) run fine without the private API — the
+    # bridge resolves classes at runtime, so nothing links against
+    # CoreBrightness at build time. Hardware behaviour is still verified by
+    # eye on real machines (docs/SPEC.md §9); CI guards the logic.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: swift --version
+      - name: Build CLI
+        run: swift build -c release --product sublight-cli
+      - name: Build app
+        run: swift build -c release --product SublightApp
+      - name: Tests
+        run: swift test
