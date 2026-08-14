@@ -11,10 +11,23 @@ stability on.
 ## [Unreleased]
 
 ### Added
+- **VoiceOver support.** Accessibility labels, hints, and values across the
+  popover, Settings, calibration, and onboarding: the menu-bar icon reports
+  dimming/idle, sliders speak their value in hertz or percent, and the
+  hidden-label pickers and terse buttons are properly named. Annotations only —
+  nothing about the UI's behavior changed.
+- The CLI's `set` command now warns on stderr when keyboard auto-brightness is
+  on: the ambient light sensor can override a commanded value within
+  milliseconds, silently invalidating a visual measurement. Run `auto off`
+  first for visual tests.
 - **GitHub scaffolding**: CI workflow (builds both products and runs the test
   suite on every push and PR), issue forms for bugs (requiring the Diagnostics
   block) and **hardware reports** (feeding the README compatibility table), a
   PR template with the DCO checklist, and a security policy.
+
+### Fixed
+- The app bundle shipped with a `com.example` placeholder bundle identifier;
+  it is now `com.hypnox.sublight`.
 
 ### Changed
 - **App icon restyled** to the amber edition: lit amber keys above the wave,
