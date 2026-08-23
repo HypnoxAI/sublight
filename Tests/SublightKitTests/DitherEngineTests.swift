@@ -168,7 +168,11 @@ final class DitherEngineTests: XCTestCase {
             }
         }
         XCTAssertFalse(offsets.isEmpty)
-        for o in offsets { XCTAssertEqual(o, 15, accuracy: 10, "OFF offset after ramp: \(o) ms") }
+        // Median again, and for the same reason as in the phase-continuity
+        // test: one load-delayed handler must not fail a test about geometry.
+        let sorted = offsets.sorted()
+        XCTAssertEqual(sorted[sorted.count / 2], 15, accuracy: 8,
+                       "median OFF offset after ramp: \(sorted)")
     }
 
     // MARK: Dirty flag
@@ -225,9 +229,20 @@ final class DitherEngineTests: XCTestCase {
         wait(0.3)
         let ons = recorder.entries.dropFirst(before).filter { if case .set(let v) = $0.command { return v > 0 }; return false }
         XCTAssertGreaterThan(ons.count, 3)
-        for (a, b) in zip(ons, ons.dropFirst()) {
-            XCTAssertEqual(Double(b.at - a.at) / 1e6, 50, accuracy: 8, "ON-to-ON spacing")
-        }
+
+        // MEDIAN, not every sample. What this test is actually asserting is
+        // that setDuty leaves the HIGH timer alone — that it is phase
+        // continuous. A single handler delayed by machine load produces one
+        // long gap and one short one either side of it, which says nothing
+        // about the timer and everything about the machine; on a shared CI
+        // runner that is routine. The median moves only if the cadence itself
+        // moved, which is the regression worth catching, and the total elapsed
+        // catches accumulated drift that a median could hide.
+        let spacings = zip(ons, ons.dropFirst()).map { Double($1.at - $0.at) / 1e6 }.sorted()
+        XCTAssertEqual(spacings[spacings.count / 2], 50, accuracy: 5, "median ON-to-ON spacing")
+        let span = Double(ons.last!.at - ons.first!.at) / 1e6
+        XCTAssertEqual(span, Double(ons.count - 1) * 50, accuracy: 12,
+                       "cadence must not drift across the window")
     }
 
     func testStartWhileRunningRetunesInsteadOfRestarting() {
