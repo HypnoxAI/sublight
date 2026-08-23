@@ -36,15 +36,19 @@ Every claim above is a measurement, not an assumption — the boundary tables, t
 daemon's cycle-period limit, and the read-back APIs that lie are documented in
 [docs/COREBRIGHTNESS.md](docs/COREBRIGHTNESS.md).
 
-<!-- SCREENSHOTS: replace these placeholders before publishing.
-     1. menu bar + popover in Simple mode
-     2. Advanced mode showing the frequency controls
-     3. Settings → General
-     4. the calibration sheet mid-flow
--->
-<div align="center">
-<em>(screenshots go here)</em>
-</div>
+| Simple — one switch and a brightness slider | Advanced — presets, custom frequency, schedule |
+|---|---|
+| ![Sublight's menu bar popover in Simple mode, status "Off": a Simple/Advanced mode switch, a "Dim keyboard below minimum" toggle in the off position, and a Schedule toggle](assets/screenshots/popover-simple.png) | ![Sublight's popover in Advanced mode, status "Dimming · 8.0 Hz": Low/Medium/High preset buttons, a frequency slider at 8.0 Hz, a brightness slider, and a sunset-to-sunrise schedule showing 7:43 PM to 6:14 AM](assets/screenshots/popover-advanced.png) |
+
+**Asked once, before the backlight is ever touched.** Declining records nothing
+and changes nothing:
+
+![A macOS alert titled "Before you enable Sublight", explaining that it dims by switching the backlight on and off several times per second at 3 to 8 Hz, that every mode produces visible flicker in the 3 to 30 Hz range, that flashing light in this range can trigger seizures in people with photosensitive epilepsy, that it should not be used by anyone who can see the keyboard and is sensitive to flashing light, and how to recover a stuck backlight. Two buttons: "I Understand - Enable" and "Cancel".](assets/screenshots/consent-alert.png)
+
+**In the menu bar**, the glyph sits among your other status items — hollow here,
+because dimming is off:
+
+![A macOS menu bar strip. At the left is Sublight's keyboard glyph with all ten keys drawn hollow, meaning dimming is idle, followed by other status icons and the clock.](assets/screenshots/menu-bar.png)
 
 ## ⚠️ Read this first
 
@@ -134,7 +138,7 @@ dimmer *and* steadier — so they're presented as two independent knobs.
 
 | Off — system control | On — Sublight active |
 |---|---|
-| ![off](assets/icons/sublight-icon-off-1024.png) | ![on](assets/icons/sublight-icon-1024.png) |
+| ![Sublight's app icon in its off state: an amber-ringed rounded tile containing a keyboard drawn in outline, every key hollow](assets/icons/sublight-icon-off-1024.png) | ![Sublight's app icon in its on state: the same amber-ringed tile, with the keyboard's keys filled solid amber](assets/icons/sublight-icon-1024.png) |
 
 **Schedule** dims automatically, either between two fixed times or from
 **sunset to sunrise**. It acts on transitions, so you can still override it by

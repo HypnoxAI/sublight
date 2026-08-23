@@ -172,6 +172,26 @@ cp /tmp/glyph/sublight-menubar-states.png assets/icons/
 The render is deterministic — an unchanged glyph produces byte-identical output,
 so a diff there means the drawing really did change.
 
+The GitHub social card is generated the same way and under the same rule:
+
+```bash
+.build/release/sublight-cli social-preview --out assets
+```
+
+It is uploaded by hand (repository Settings → General → Social preview), so
+regenerating the file is not enough on its own — re-upload it if the mark or
+the tagline changes.
+
+### Screenshots
+
+`scripts/capture_screenshots.sh <name> [delay]` takes a timed full-screen
+capture, because a menu bar popover closes the moment it loses focus and cannot
+be photographed interactively. It needs Screen Recording permission for
+whichever app runs it; the system screenshot hotkeys do not, and work just as
+well. Either way, crop from the full frame rather than capturing a region, so
+the crop is reproducible and the source is kept. Every image in the README
+carries descriptive alt text — screenshots of a *safety* prompt especially.
+
 ## Scope reminders
 
 Sublight is intentionally narrow: Apple Silicon MacBooks with a backlit

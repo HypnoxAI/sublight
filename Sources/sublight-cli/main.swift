@@ -50,6 +50,8 @@ func printUsage() {
       sublight-cli restore [<0..1>]           Panic restore (default lands at 0.30)
       sublight-cli notify-probe               Spike: can the change-notification tell your
                                               keypress from our writes? (interactive)
+      sublight-cli social-preview --out <dir> DEV: render the 1280x640 GitHub social card
+                                              from the v1 mark. Deterministic; touches no hardware.
       sublight-cli glyph render --out <dir>   DEV: render the menu bar icon's states and the
                                               README legend from StatusGlyph. Touches no
                                               hardware; deterministic, so re-rendering an
@@ -536,7 +538,7 @@ guard let command = args.first else {
 // command the backlight, and they are how a failing probe gets diagnosed.
 // `glyph` joins the exempt list: it draws pictures and never speaks to the
 // daemon, so it must not require a verified private-API surface to run.
-if !["help", "--help", "-h", "sig", "signatures", "dump", "glyph"].contains(command) {
+if !["help", "--help", "-h", "sig", "signatures", "dump", "glyph", "social-preview"].contains(command) {
     let report = validateAPISurface()
     if !report.passed {
         fputs(report.text + "\n", stderr)
@@ -1162,6 +1164,34 @@ case "notify-probe":
     print("  • all≈0                   → nil keys was wrong / wrong mechanism; try other keys.")
     print("Report the three numbers.")
     exit(0)
+
+case "social-preview":
+    guard let outPath = flagValue(args, "--out") else {
+        fputs("usage: sublight-cli social-preview --out <dir> [--icon <png>]\n", stderr)
+        exit(1)
+    }
+    let iconPath = flagValue(args, "--icon") ?? "assets/icons/sublight-icon-1024.png"
+    let iconURL = URL(fileURLWithPath: (iconPath as NSString).expandingTildeInPath)
+    guard FileManager.default.fileExists(atPath: iconURL.path) else {
+        fputs("error: icon not found at \(iconURL.path)\n", stderr)
+        exit(2)
+    }
+    guard let data = SocialPreview.render(iconURL: iconURL) else {
+        fputs("error: could not render the social preview\n", stderr)
+        exit(2)
+    }
+    do {
+        let dir = URL(fileURLWithPath: (outPath as NSString).expandingTildeInPath)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let out = dir.appendingPathComponent(SocialPreview.fileName)
+        try data.write(to: out, options: .atomic)
+        print("  \(out.path)")
+        print("\nUpload manually: GitHub → repository Settings → General → Social preview → Edit.")
+        exit(0)
+    } catch {
+        fputs("error: \(error)\n", stderr)
+        exit(2)
+    }
 
 case "glyph":
     guard args.count > 1, args[1] == "render" else {
