@@ -54,8 +54,16 @@ func printUsage() {
     HOLD OPTIONS:
       --floor <f>     Assumed system clamp floor        (default 0.0625)
       --period <s>    Dither period in seconds          (default 0.25)
+      --freq <hz>     Dither frequency in Hz            (alias for 1/--period)
+      --duty <d>      Drive the engine at this duty directly instead of deriving it
+                      from <level>. Same as passing level = d x floor, without the
+                      arithmetic; <level> then becomes optional.
       --seconds <n>   Run for n seconds, then restore and print the command-truth
                       counters (omit to hold until Ctrl-C)
+      --sample-hz <h>     Poll BOTH read-backs (brightnessForKeyboard: and
+                          backlightLevelForKeyboard:) at h Hz on the engine queue
+                          during the run, timestamped against the last commanded level.
+      --sample-csv <path> Where to write those samples (default: beside diagnostics.json)
 
     PAIR-SWEEP OPTIONS (diagnostic; bypasses the engine):
       --on-ms <X>     ON window in milliseconds         (required)
@@ -133,6 +141,103 @@ func marker(_ label: String, extra: String = "") -> String {
                   extra.isEmpty ? "" : "  " + extra)
 }
 
+/// nil = present but invalid; .some(nil) = absent; .some(.some) = a finite value.
+func optionalDuty(_ args: [String]) -> Double?? {
+    guard let raw = flagValue(args, "--duty") else { return .some(nil) }
+    guard let v = Double(raw), v.isFinite, v > 0, v < 1 else { return nil }
+    return .some(v)
+}
+/// nil = present but invalid; .some(nil) = absent; .some(.some) = a finite value.
+func optionalFreq(_ args: [String]) -> Double?? {
+    guard let raw = flagValue(args, "--freq") else { return .some(nil) }
+    guard let v = Double(raw), v.isFinite, v > 0 else { return nil }
+    return .some(v)
+}
+/// nil = present but invalid; .some(nil) = absent; .some(.some) = a finite value.
+func optionalSampleHz(_ args: [String]) -> Double?? {
+    guard let raw = flagValue(args, "--sample-hz") else { return .some(nil) }
+    guard let v = Double(raw), v.isFinite, v > 0, v <= 200 else { return nil }
+    return .some(v)
+}
+
+/// Polls BOTH read-backs while the engine dithers.
+///
+/// DELIBERATELY on the engine queue rather than a side thread: the bridge is
+/// queue-confined, so a poll from anywhere else would hop onto this queue
+/// anyway — running here makes the interference explicit and serialized behind
+/// the edge handlers instead of hidden inside them. It IS interference: two
+/// getter calls per sample share the serial queue the edges use, so a sampled
+/// run is not identical to an unsampled one. That is exactly why the err-dark
+/// and coalescing counters are read for the sampled run too — if the polling
+/// perturbed the schedule, they will say so.
+final class ReadbackSampler {
+    struct Row {
+        let atNanos: UInt64
+        let brightness: Float?
+        let backlightLevel: Float?
+        /// Round trip of each getter. A read-back that is being served from a
+        /// cache costs microseconds; one that actually crosses to the daemon
+        /// costs far more. If only the slow reads carry non-zero values, the
+        /// getter is not an output oracle at all — it is a stale cache.
+        let brightnessRtMs: Double
+        let backlightRtMs: Double
+        let lastValue: Float?
+        let sinceLastCmdMs: Double?
+    }
+
+    private let controller: BacklightController
+    private var timer: DispatchSourceTimer?
+    private var rows: [Row] = []
+
+    init(_ controller: BacklightController) { self.controller = controller }
+
+    func start(hz: Double) {
+        let t = DispatchSource.makeTimerSource(flags: .strict, queue: EngineQueue.queue)
+        t.setEventHandler { [weak self] in self?.sample() }
+        t.schedule(deadline: .now(), repeating: .nanoseconds(Int(1e9 / hz)), leeway: .milliseconds(1))
+        t.resume()
+        timer = t
+    }
+
+    /// Runs on the engine queue; `rows` is confined to it.
+    private func sample() {
+        let now = DispatchTime.now().uptimeNanoseconds
+        let t0 = DispatchTime.now().uptimeNanoseconds
+        let b = controller.bridge.brightness(controller.keyboardID)
+        let t1 = DispatchTime.now().uptimeNanoseconds
+        let bl = controller.bridge.backlightLevel(controller.keyboardID)
+        let t2 = DispatchTime.now().uptimeNanoseconds
+        let last = EngineDiagnostics.shared.lastCommand()
+        rows.append(Row(atNanos: now,
+                        brightness: b,
+                        backlightLevel: bl,
+                        brightnessRtMs: Double(t1 &- t0) / 1e6,
+                        backlightRtMs: Double(t2 &- t1) / 1e6,
+                        lastValue: last?.value,
+                        sinceLastCmdMs: last.map { Double(now &- $0.atNanos) / 1e6 }))
+    }
+
+    /// Stop and drain. The rows are only safe to read after this returns.
+    func finish() -> [Row] {
+        timer?.cancel(); timer = nil
+        return EngineQueue.run { rows }
+    }
+
+    static func csv(_ rows: [Row], relativeTo t0: UInt64) -> String {
+        var out = ["t_ms,brightness,backlight_level,b_rt_ms,bl_rt_ms,last_cmd,since_last_cmd_ms"]
+        for r in rows {
+            out.append(String(format: "%.3f,%@,%@,%.4f,%.4f,%@,%@",
+                              Double(r.atNanos &- t0) / 1e6,
+                              r.brightness.map { String(format: "%.6f", $0) } ?? "",
+                              r.backlightLevel.map { String(format: "%.6f", $0) } ?? "",
+                              r.brightnessRtMs, r.backlightRtMs,
+                              r.lastValue.map { String(format: "%.6f", $0) } ?? "",
+                              r.sinceLastCmdMs.map { String(format: "%.3f", $0) } ?? ""))
+        }
+        return out.joined(separator: "\n") + "\n"
+    }
+}
+
 func optionalFloor(_ args: [String]) -> Float? {
     guard let raw = flagValue(args, "--floor") else { return 0.0625 }
     guard let v = Float(raw), v.isFinite, v > 0 else { return nil }
@@ -156,8 +261,17 @@ func makeController(args: [String]) -> BacklightController? {
             fputs("error: --floor must be a finite number\n", stderr)
             return nil
         }
+        guard let freq = optionalFreq(args) else {
+            fputs("error: --freq must be a finite number > 0\n", stderr)
+            return nil
+        }
+        if period != nil, freq != nil {
+            fputs("error: pass --period or --freq, not both\n", stderr)
+            return nil
+        }
         let controller = try BacklightController(floor: floor)
         if let period { controller.period = period }
+        if let freq { controller.frequencyHz = freq }
 
         // Crash recovery commands the backlight, so only after the API surface
         // was verified (never for the exempt read-only commands).
@@ -665,8 +779,14 @@ case "dither-test":
     exit(0)
 
 case "hold":
-    guard let value = parseFloat(args.count > 1 ? args[1] : nil), (0...1).contains(value) else {
-        fputs("usage: sublight-cli hold <0..1> [--floor f] [--period s]\n", stderr)
+    guard let dutyFlag = optionalDuty(args) else {
+        fputs("error: --duty must be a finite number in (0, 1)\n", stderr)
+        exit(1)
+    }
+    let levelArg = parseFloat(args.count > 1 ? args[1] : nil)
+    if dutyFlag == nil, levelArg == nil || !(0...1).contains(levelArg!) {
+        fputs("usage: sublight-cli hold <0..1> [--floor f] [--period s | --freq hz] [--duty d]\n", stderr)
+        fputs("       with --duty, <level> is optional: level = duty x floor\n", stderr)
         exit(1)
     }
     guard let c = makeController(args: args) else { exit(2) }
@@ -675,6 +795,13 @@ case "hold":
         fputs("error: --seconds must be a finite number > 0\n", stderr)
         exit(1)
     }
+    guard let sampleHz = optionalSampleHz(args) else {
+        fputs("error: --sample-hz must be a finite number in (0, 200]\n", stderr)
+        exit(1)
+    }
+    // --duty is pure CLI sugar for the level that produces that duty; the engine
+    // is driven through exactly the same setLevel path either way.
+    let value = dutyFlag.map { Float($0) * c.floor } ?? levelArg!
 
     print("Holding level \(String(format: "%.4f", value)) (floor \(String(format: "%.4f", c.floor)), period \(c.period)s).")
     if value < c.floor && value > 0 {
@@ -690,8 +817,17 @@ case "hold":
     // ordered strictly before the start block setLevel is about to enqueue.
     EngineQueue.run { EngineDiagnostics.shared.reset() }
     let holdStart = Date()
+    let holdStartNanos = DispatchTime.now().uptimeNanoseconds
     print(marker("RUN START"))
     c.setLevel(value)
+
+    var sampler: ReadbackSampler?
+    if let sampleHz {
+        let s = ReadbackSampler(c)
+        s.start(hz: sampleHz)
+        sampler = s
+        print(String(format: "read-back sampling: %.1f Hz on the engine queue (both getters per sample)", sampleHz))
+    }
 
     // A no-op hop drains the queue behind setLevel's async start, so the state
     // read below is the settled one.
@@ -706,15 +842,50 @@ case "hold":
 
     if let seconds {
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
-            // Snapshot BEFORE the restore, so the restore's own three commands
-            // do not land in the run's latency distribution — and ON the engine
-            // queue, so it cannot land mid-edge and report a HIGH as fired but
-            // not yet executed.
+            // Stop sampling BEFORE the restore: the restore commands 0.4 and
+            // hands the ALS back, so any sample after it describes the system's
+            // recovery, not the run.
+            let sampledRows = sampler?.finish()
+            // Snapshot BEFORE the restore too, so the restore's own three
+            // commands do not land in the run's latency distribution — and ON
+            // the engine queue, so it cannot land mid-edge and report a HIGH as
+            // fired but not yet executed.
             let snap = EngineQueue.run { c.engine.counters }
             c.engine.restoreNow(force: false)
             let elapsed = Date().timeIntervalSince(holdStart)
             print(marker("RUN STOP", extra: String(format: "elapsed=%.3fs", elapsed)))
             print(snap.report())
+
+            if let rows = sampledRows {
+                let csvPath = flagValue(args, "--sample-csv")
+                    ?? DiagnosticsStore.defaultURL.deletingLastPathComponent()
+                        .appendingPathComponent("readback.csv").path
+                let text = ReadbackSampler.csv(rows, relativeTo: holdStartNanos)
+                try? FileManager.default.createDirectory(
+                    at: URL(fileURLWithPath: csvPath).deletingLastPathComponent(),
+                    withIntermediateDirectories: true)
+                try? text.write(toFile: csvPath, atomically: true, encoding: .utf8)
+                let bOK = rows.compactMap(\.brightness)
+                let blOK = rows.compactMap(\.backlightLevel)
+                print(String(format: "  read-back samples: %d  (brightness n=%d, backlightLevel n=%d)",
+                             rows.count, bOK.count, blOK.count))
+                func spread(_ label: String, _ vs: [Float]) {
+                    guard !vs.isEmpty else { print("  \(label): no values"); return }
+                    let uniq = Set(vs.map { String(format: "%.6f", $0) }).sorted()
+                    print(String(format: "  %@: min %.6f  max %.6f  distinct %d %@",
+                                 label, vs.min()!, vs.max()!, uniq.count,
+                                 uniq.count <= 6 ? "-> " + uniq.joined(separator: ", ") : ""))
+                }
+                spread("brightnessForKeyboard:   ", bOK)
+                spread("backlightLevelForKeyboard:", blOK)
+                let bRt = rows.map(\.brightnessRtMs).sorted()
+                let blRt = rows.map(\.backlightRtMs).sorted()
+                if !bRt.isEmpty {
+                    print(String(format: "  getter round trip ms: brightness p50 %.4f max %.4f | backlightLevel p50 %.4f max %.4f",
+                                 bRt[bRt.count / 2], bRt.last!, blRt[blRt.count / 2], blRt.last!))
+                }
+                print("  csv: \(csvPath)")
+            }
             var label = String(format: "hold %.4f", value)
             if case .running(let hz, let duty) = resolved {
                 label = String(format: "hold %.3f Hz duty %.3f for %.0f s", hz, duty, seconds)

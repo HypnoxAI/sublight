@@ -11,6 +11,13 @@ stability on.
 ## [Unreleased]
 
 ### Added
+- **Discrimination runs and a read-back sampler.** `hold` gains `--freq`,
+  `--duty` (drive the engine at an exact duty instead of deriving it from a
+  level), `--sample-hz` and `--sample-csv`. The sampler polls BOTH read-backs on
+  the engine queue during a run, timing each getter and stamping it against the
+  last commanded level, and writes a CSV. The diagnostics tally now remembers
+  the last commanded level so a read-back has something honest to be compared
+  against. CLI and instrumentation only — no engine behavior changed.
 - **Command-truth instrumentation.** Every backlight-mutating daemon call is
   now timed at the bridge seam and logged at debug level in category `engine`
   with its monotonic timestamp, requested value, `fadeSpeed`, `commit`, the

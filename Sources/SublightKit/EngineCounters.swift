@@ -177,7 +177,20 @@ public final class EngineDiagnostics: @unchecked Sendable {
     private var lastExecutedHighNanos: UInt64?
     private var skipRun: UInt64 = 0
 
+    /// The most recent brightness LEVEL commanded, and when. A read-back
+    /// sampler needs something to compare against, and the only honest
+    /// reference is what we last actually asked the daemon for.
+    private var lastValue: Float?
+    private var lastValueAtNanos: UInt64?
+
     public init() {}
+
+    /// Last commanded brightness level and the monotonic time of the call.
+    public func lastCommand() -> (value: Float, atNanos: UInt64)? {
+        lock.lock(); defer { lock.unlock() }
+        guard let v = lastValue, let t = lastValueAtNanos else { return nil }
+        return (v, t)
+    }
 
     // MARK: Read
 
@@ -263,10 +276,17 @@ public final class EngineDiagnostics: @unchecked Sendable {
 
     // MARK: Commands (fed by the bridge)
 
-    public func noteCommand(kind: String, latencyMs: Double) {
+    /// - Parameter value: the brightness level, for the brightness setters;
+    ///   nil for the flag mutators (auto-brightness, idle dimming), which do
+    ///   not move the level and must not overwrite the read-back reference.
+    public func noteCommand(kind: String, value: Float? = nil, atNanos: UInt64? = nil, latencyMs: Double) {
         lock.lock(); defer { lock.unlock() }
         counters.latency.record(latencyMs)
         counters.commandsByKind[kind, default: 0] &+= 1
+        if let value {
+            lastValue = value
+            lastValueAtNanos = atNanos ?? DispatchTime.now().uptimeNanoseconds
+        }
     }
 }
 

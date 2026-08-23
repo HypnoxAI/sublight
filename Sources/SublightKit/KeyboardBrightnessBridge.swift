@@ -180,7 +180,7 @@ public final class KeyboardBrightnessBridge {
         Self.signposter.endInterval("XPC", state)
 
         let ms = Double(t1 &- t0) / 1e6
-        EngineDiagnostics.shared.noteCommand(kind: kind, latencyMs: ms)
+        EngineDiagnostics.shared.noteCommand(kind: kind, value: value, atNanos: t0, latencyMs: ms)
         Log.engine.debug("""
             cmd \(kind, privacy: .public) \
             t=\(Double(t0) / 1e6, format: .fixed(precision: 3), privacy: .public)ms \
@@ -242,6 +242,16 @@ public final class KeyboardBrightnessBridge {
     /// alone as proof that a level is physically displayed — the same lesson
     /// as the CoreGraphics gamma regression, where the API reported success
     /// while the hardware ignored it.
+    ///
+    /// MEASURED, 2026-08-23 (directive #3-B): worse than "may". Over 600
+    /// samples it matched the last commanded level only 84.7 % of the time,
+    /// and EVERY mismatch returned the same value, 0.1248 — step 2 of the
+    /// 16-step ladder, which the engine never commands, and which was also
+    /// observed before the first command of an unrelated run. So the getter
+    /// intermittently serves a persistent system-side setting rather than the
+    /// live level. It is also expensive: p50 0.6 ms against 0.15 ms for a
+    /// setter, with a 21 ms outlier — longer than the ON window at 9 Hz /
+    /// duty 0.15, so polling it on the engine queue can stall an edge.
     public func brightness(_ keyboardID: UInt64) -> Float? {
         EngineQueue.run {
             guard responds("brightnessForKeyboard:") else { return nil }
@@ -286,10 +296,25 @@ public final class KeyboardBrightnessBridge {
         }
     }
 
-    /// A SECOND read-back, distinct from `brightness(_:)`. Hypothesis: one of
-    /// the two reports the commanded target and the other the actual LED
-    /// level. If they diverge during a fade, we finally have an in-code oracle
-    /// for true output (see SPEC §6.4). `probe` compares them side by side.
+    /// A SECOND read-back, distinct from `brightness(_:)`.
+    ///
+    /// MEASURED, 2026-08-23 (directive #3-B, 601 samples at 20 Hz during a 9 Hz
+    /// dither on Mac16,12 / macOS 26.6.1):
+    ///
+    ///   1. It is NOT normalized [0, 1]. It reports on a ~16x larger scale
+    ///      consistent with the 16-step ladder — commanded 0.0625 reads back
+    ///      1.0100, commanded 0.1248 reads back 1.9177 — i.e. roughly the step
+    ///      index. Do not compare it against a [0, 1] value without scaling.
+    ///   2. It is NOT an output oracle. It moves in lockstep with
+    ///      `brightness(_:)` (the two agree on every sample bar the ~0.5 ms
+    ///      between the two calls) and is completely blind to real LED output:
+    ///      across 30 s in which the keys visibly went fully dark 10-30 times,
+    ///      the longest run of zero read-back was 300 ms and the per-second
+    ///      zero-fraction never left 0.70-0.75.
+    ///
+    /// The hypothesis this method was added to test — that one getter reports
+    /// the target and the other the actual LED — is REFUTED. Neither does.
+    /// `probe` still compares them side by side.
     public func backlightLevel(_ keyboardID: UInt64) -> Float? {
         EngineQueue.run {
             guard responds("backlightLevelForKeyboard:") else { return nil }

@@ -76,9 +76,15 @@ ON commands, and the longest run of consecutive err-dark skips). Read them with:
 
 ```bash
 sublight-cli status                       # this process, plus the last recorded run
-sublight-cli hold 0.009375 --period 0.111111111 --seconds 30   # engine path, timed
+sublight-cli hold --freq 9 --duty 0.15 --seconds 30            # engine path, timed
+sublight-cli hold --freq 9 --duty 0.15 --seconds 30 --sample-hz 20   # + read-back poll
 sublight-cli pair-sweep --on-ms 16        # raw ON/OFF pairs, engine bypassed
 ```
+
+Neither read-back is an output oracle — see the measured notes on
+`brightness(_:)` and `backlightLevel(_:)` in `KeyboardBrightnessBridge.swift`.
+`--sample-hz` exists to characterise them, not to trust them, and it polls on
+the engine queue where it can stall an edge; do not leave it on.
 
 `scheduled - fired` is the number of deadlines a repeating `DispatchSourceTimer`
 coalesced away while its queue was blocked; `fired - executed` is what engine
