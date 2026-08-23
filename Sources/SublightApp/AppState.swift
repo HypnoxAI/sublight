@@ -19,14 +19,16 @@
 //  inactive). Suspension never clears the intent, so resume re-engages.
 //
 //  Frequency: continuous, sub-floor dithering (SPEC §3/§5).
-//    Simple   → on/off + brightness, fixed 9 Hz.
-//    Advanced → 3/6/9 Hz presets + 2–12 Hz custom slider + separate brightness.
+//    Simple   → on/off + brightness, fixed 8 Hz.
+//    Advanced → 3/6/8 Hz presets + 2–8 Hz custom slider + separate brightness.
+//  8 Hz is the measured stability ceiling, not a taste call — see
+//  DitherEngine.maxStableFrequencyHz. Nothing in the app can exceed it.
 //  All mode use gated behind a one-time photosensitivity acknowledgment.
 //
 //  Schedule (manual time; sunset/sunrise is a later addition): transition-based
 //  auto-dim between a start and end time. Acts only on window ENTER/EXIT so the
 //  user can still override manually between transitions. In Simple it toggles
-//  the 9 Hz dim; in Advanced it also applies `scheduleFrequency`.
+//  the 8 Hz dim; in Advanced it also applies `scheduleFrequency`.
 //
 //  Licensed under the Apache License 2.0 — see LICENSE.
 //
@@ -55,14 +57,19 @@ final class AppState: ObservableObject {
     // MARK: Constants
 
     static let freqMin = 2.0
-    static let freqMax = 12.0
-    static let simpleFreq = 9.0
-    static let presets: [(label: String, hz: Double)] = [("Low", 3), ("Medium", 6), ("High", 9)]
+    /// The custom slider stops AT the measured stability ceiling. The engine
+    /// would clamp anyway, but a slider that reads 12 Hz while the hardware
+    /// runs 8 is a lie the UI must not tell.
+    static let freqMax = DitherEngine.maxStableFrequencyHz
+    /// Simple mode's fixed frequency when the user has not calibrated: the
+    /// High preset, i.e. the ceiling — dimmest and steadiest we can hold.
+    static let simpleFreq = FrequencyPreset.high
+    static let presets = FrequencyPreset.all
 
     // MARK: Published UI state
 
     @Published var isEnabled: Bool = false { didSet { apply() } }
-    @Published var frequencyHz: Double = 9.0 { didSet { apply() } }
+    @Published var frequencyHz: Double = FrequencyPreset.high { didSet { apply() } }
     @Published var brightness: Double = 0.5 { didSet { apply() } }
     /// The machine is asleep, its screens are off, or the login session is
     /// inactive. Set only by SleepWakeObserver transitions.
@@ -82,7 +89,7 @@ final class AppState: ObservableObject {
     @Published var scheduleEnabled: Bool = false { didSet { onScheduleChanged() } }
     @Published var scheduleStartMinutes: Int = 21 * 60 { didSet { persistSchedule(); reevaluateSchedule(force: true) } }
     @Published var scheduleEndMinutes: Int = 7 * 60 { didSet { persistSchedule(); reevaluateSchedule(force: true) } }
-    @Published var scheduleFrequency: Double = 9.0 { didSet { defaults.set(scheduleFrequency, forKey: Keys.schedFreq) } }
+    @Published var scheduleFrequency: Double = FrequencyPreset.high { didSet { defaults.set(scheduleFrequency, forKey: Keys.schedFreq) } }
     @Published var scheduleMode: ScheduleMode = .fixed { didSet { onScheduleModeChanged() } }
     /// Coordinates for solar scheduling. Entered by hand, used only for local
     /// arithmetic — see Solar.swift for why this isn't CoreLocation.
@@ -297,7 +304,9 @@ final class AppState: ObservableObject {
         else if hz <= 7 { band = "associated with calm, relaxed states" }
         else { band = "associated with alert, focused states" }
         var s = String(format: "%.1f Hz — %@ in entrainment research. Effects unproven.", hz, band)
-        if hz >= 10 { s += " Near the top of the range it may smooth out or stop modulating." }
+        if hz >= AppState.freqMax - 0.001 {
+            s += " This is the top of the range: above it macOS stops honouring the dither and the light drops out in multi-second gaps."
+        }
         return s
     }
 
@@ -319,7 +328,7 @@ final class AppState: ObservableObject {
     /// Fill level for the menu bar glyph (StatusGlyph): hollow unless
     /// effectively running — so suspended reads as hollow even while the
     /// toggle is on — otherwise the frequency in use bucketed to the nearest
-    /// preset: Low 3 Hz → 0.3, Medium 6 Hz → 0.5, High 9 Hz → 0.8.
+    /// preset: Low 3 Hz → 0.3, Medium 6 Hz → 0.5, High 8 Hz → 0.8.
     var glyphFraction: CGFloat {
         CGFloat(DimmingPolicy.glyphFraction(userEnabled: isEnabled, systemSuspended: systemSuspended,
                                             frequencyHz: effectiveFrequency))
@@ -791,10 +800,10 @@ final class AppState: ObservableObject {
         controller?.panicRestore(to: 0.4)
         advancedMode = false
         brightness = 0.5
-        frequencyHz = 9.0
+        frequencyHz = FrequencyPreset.high
         scheduleStartMinutes = 21 * 60
         scheduleEndMinutes = 7 * 60
-        scheduleFrequency = 9.0
+        scheduleFrequency = FrequencyPreset.high
         acknowledged = false
         clearCalibration()
         for key in [Keys.ack, Keys.brightness, Keys.freq, Keys.advanced, Keys.floor,

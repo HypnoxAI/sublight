@@ -29,8 +29,8 @@ body:
   - type: input
     id: hz
     attributes:
-      label: Flicker-free frequency
-      description: "From calibration (e.g. 9.0 Hz)"
+      label: Stability ceiling
+      description: "Highest frequency that holds with no multi-second dark envelopes — from calibration, or a 5-minute `sublight-cli hold --freq N --duty 0.15 --seconds 300` soak (e.g. 8.0 Hz)"
   - type: dropdown
     id: works
     attributes:

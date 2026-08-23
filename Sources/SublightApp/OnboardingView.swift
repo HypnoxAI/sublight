@@ -112,7 +112,7 @@ struct OnboardingView: View {
                 .font(.title3).bold()
                 .foregroundStyle(.orange)
 
-            Text("Because Sublight dims by flickering the backlight, it produces flicker in the 2–12 Hz range — a range that can trigger seizures in people with photosensitive epilepsy.")
+            Text("Because Sublight dims by flickering the backlight, it produces flicker in the 2–8 Hz range — a range that can trigger seizures in people with photosensitive epilepsy.")
                 .fixedSize(horizontal: false, vertical: true)
 
             Text("The light is small, dim, and in peripheral vision, so the risk is low. But if you or anyone using this Mac has epilepsy or any history of photosensitivity, do not use this app. Stop immediately if you feel dizzy, disoriented, or notice any involuntary movement.")

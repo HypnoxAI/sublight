@@ -77,7 +77,38 @@ public enum EngineState: Equatable {
 
 public final class DitherEngine {
 
-    public static let frequencyRange: ClosedRange<Double> = 1.0...40.0
+    /// THE STABILITY CEILING. Above this the daemon stops honouring the
+    /// dither and the keys fall into multi-second dark envelopes.
+    ///
+    /// PROVENANCE — measured, not guessed (directives #3, #3-B, #4-MEASURE):
+    ///   • Boundary: 8.5 Hz goes dark within 30 s; 8.0 Hz held a five-minute
+    ///     soak clean (2401/2401 edges, zero skips). In period terms 117.6 ms
+    ///     fails and 125.0 ms holds.
+    ///   • Causal variable is the CYCLE PERIOD, not the command rate: doubling
+    ///     the writes per cycle at a fixed period stayed steady. (Open caveat:
+    ///     a dedupe keyed on the 1/16 output step rather than the exact value
+    ///     would mimic that result.)
+    ///   • NOT the engine. Across 9,270 HIGH edges the engine executed 9,265,
+    ///     skipped 5 benign isolated cycles, coalesced none, and the daemon
+    ///     rejected nothing. The failure is entirely daemon-side.
+    ///   • Measured on Mac16,12 (M4) / macOS 26.6.1, 2026-08-23.
+    ///   • Margin 0.5 Hz below the 8.5 Hz first failure, per user policy.
+    ///
+    /// RE-QUALIFY AFTER ANY macOS UPDATE via the soak ritual:
+    ///     sublight-cli hold --freq 8 --duty 0.15 --seconds 300
+    /// watching the keys, with glances at ~0:30 / ~2:30 / ~4:30. Any dark
+    /// envelope at any glance means the boundary moved: the new first-failure
+    /// frequency minus 0.5 Hz becomes this constant.
+    public static let maxStableFrequencyHz: Double = 8.0
+
+    /// What the app and the CLI will run. The upper bound IS the ceiling.
+    public static let frequencyRange: ClosedRange<Double> = 1.0...maxStableFrequencyHz
+
+    /// Research only, reachable from the CLI's `--allow-unstable` and from
+    /// nowhere in the app. Everything above `maxStableFrequencyHz` in here is
+    /// known-broken on the reference machine; it exists so the boundary can be
+    /// re-measured without editing the source.
+    public static let unstableFrequencyRange: ClosedRange<Double> = 1.0...40.0
     /// The duty a fade starts from on enable and ramps to on disable: the
     /// brightest point of the hold, so the transition reads as a fade from
     /// and to "just dim" rather than a snap.
@@ -112,6 +143,7 @@ public final class DitherEngine {
     private var _highLevel: Float
     private var _restoreLevel: Float = 0.4
     private var _state: EngineState = .stopped
+    private var _allowsUnstable = false
 
     private struct Ramp {
         let startCycle: UInt64
@@ -165,6 +197,21 @@ public final class DitherEngine {
 
     public var state: EngineState { EngineQueue.run { _state } }
     public var isRunning: Bool { state.isRunning }
+
+    /// Lift the stability ceiling (see `maxStableFrequencyHz`). Research
+    /// escape hatch: the CLI's `--allow-unstable` sets it, the app never does.
+    /// Takes effect on the next clamp — set it before requesting a frequency.
+    public var allowsUnstableFrequency: Bool {
+        get { EngineQueue.run { _allowsUnstable } }
+        set { EngineQueue.run { _allowsUnstable = newValue } }
+    }
+
+    /// The frequency this engine would actually run for `hz`, after clamping.
+    /// Callers that display a frequency use this so the UI never shows a value
+    /// the engine is not honouring.
+    public func clampedFrequency(_ hz: Double) -> Double {
+        EngineQueue.run { clampFrequencyLocked(hz) }
+    }
 
     /// Scheduled / fired / executed / skipped edge counts and daemon command
     /// latency for this process. Safe from any thread. Exposed by
@@ -234,14 +281,27 @@ public final class DitherEngine {
 
     // MARK: - Locked implementation (on `queue`)
 
-    private static func clampFrequency(_ hz: Double) -> Double {
-        guard hz.isFinite else { return 9.0 }
-        return min(max(hz, frequencyRange.lowerBound), frequencyRange.upperBound)
+    /// Clamp to the range in force and SAY SO when the request was refused.
+    /// Silently running at a different frequency than asked for is how a
+    /// ceiling becomes invisible and someone spends a week re-diagnosing it.
+    private func clampFrequencyLocked(_ hz: Double) -> Double {
+        let range = _allowsUnstable ? Self.unstableFrequencyRange : Self.frequencyRange
+        guard hz.isFinite else { return range.upperBound }
+        let f = min(max(hz, range.lowerBound), range.upperBound)
+        if abs(f - hz) > 0.001 {
+            Log.engine.notice("""
+                frequency \(hz, format: .fixed(precision: 2), privacy: .public) Hz clamped to \
+                \(f, format: .fixed(precision: 2), privacy: .public) Hz \
+                (measured stability ceiling \(Self.maxStableFrequencyHz, format: .fixed(precision: 2), privacy: .public) Hz\
+                \(self._allowsUnstable ? ", ceiling LIFTED" : "", privacy: .public))
+                """)
+        }
+        return f
     }
 
     private func startLocked(frequencyHz hz: Double, duty: Double,
                              rampFrom: Double?, rampDuration rampDurationRaw: TimeInterval) {
-        let f = Self.clampFrequency(hz)
+        let f = clampFrequencyLocked(hz)
         let target = DitherSchedule.clampDuty(duty)
         let rampDuration = rampDurationRaw.isFinite ? max(rampDurationRaw, 0) : 0
 
@@ -280,7 +340,7 @@ public final class DitherEngine {
 
     private func setFrequencyLocked(_ hz: Double) {
         guard let s = schedule else { return }
-        let f = Self.clampFrequency(hz)
+        let f = clampFrequencyLocked(hz)
         guard abs(s.frequencyHz - f) > 0.001 else { return }
         ramp = nil
         let anchor = DispatchTime.now().uptimeNanoseconds

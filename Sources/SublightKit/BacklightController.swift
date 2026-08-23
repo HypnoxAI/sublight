@@ -42,9 +42,19 @@ public final class BacklightController {
 
     /// Dither frequency while holding sub-minimum. Applied on the next
     /// `setLevel`; changing it mid-run takes a new timing anchor.
-    public var frequencyHz: Double = 9.0 {
-        didSet { frequencyHz = min(max(frequencyHz, DitherEngine.frequencyRange.lowerBound),
-                                   DitherEngine.frequencyRange.upperBound) }
+    ///
+    /// Clamped through the ENGINE rather than against the static range, so
+    /// that reading this property back always tells you what will actually
+    /// run — including when `allowsUnstableFrequency` has lifted the ceiling.
+    public var frequencyHz: Double = DitherEngine.maxStableFrequencyHz {
+        didSet { frequencyHz = engine.clampedFrequency(frequencyHz) }
+    }
+
+    /// Research escape hatch — lifts the measured stability ceiling. Set it
+    /// BEFORE assigning `frequencyHz`, or the assignment clamps first.
+    public var allowsUnstableFrequency: Bool {
+        get { engine.allowsUnstableFrequency }
+        set { engine.allowsUnstableFrequency = newValue }
     }
 
     /// Period form of `frequencyHz`, for callers that think in seconds

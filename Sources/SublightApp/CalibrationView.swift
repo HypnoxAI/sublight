@@ -209,7 +209,7 @@ struct CalibrationView: View {
             }
 
             if cal.frequencyHitCeiling {
-                Text("Note: your steady point landed at the top of the range. Above roughly 10 Hz macOS starts merging the commands, so the light can look steady because it has stopped flickering altogether — which also means it stops going below the floor. If dimming seems weak, try a lower frequency by hand.")
+                Text("Note: your steady point landed at the top of the range. 8 Hz is Sublight's measured ceiling on this hardware — above it macOS stops honouring the dither and the keys fall dark for seconds at a time, so the ladder does not go higher. If the light still looks like it is pulsing, that is the honest answer at this frequency rather than something to tune away.")
                     .font(.caption2).foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
             }

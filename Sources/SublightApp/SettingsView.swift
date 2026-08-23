@@ -209,7 +209,7 @@ private struct SafetyTab: View {
             Section {
                 Text("Photosensitive seizure warning")
                     .font(.headline)
-                Text("Sublight dims by rapidly modulating the backlight, producing flicker between roughly 2 and 12 Hz — a range that can trigger seizures in people with photosensitive epilepsy. The light is small, dim, and in peripheral vision, so risk is low, but if you have any history of photosensitivity or epilepsy, do not use this app.")
+                Text("Sublight dims by rapidly modulating the backlight, producing flicker between roughly 2 and 8 Hz — a range that can trigger seizures in people with photosensitive epilepsy. The light is small, dim, and in peripheral vision, so risk is low, but if you have any history of photosensitivity or epilepsy, do not use this app.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

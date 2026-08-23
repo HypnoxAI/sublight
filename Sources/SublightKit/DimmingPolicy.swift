@@ -19,6 +19,20 @@
 
 import Foundation
 
+/// The shipped frequency presets. They live here, not in the app, because
+/// High is not a number someone chose — it IS the measured stability ceiling,
+/// and tying it to the constant makes that structural rather than a comment
+/// somebody has to remember to update.
+public enum FrequencyPreset {
+    public static let low = 3.0
+    public static let medium = 6.0
+    public static let high = DitherEngine.maxStableFrequencyHz
+
+    /// Label/value pairs in UI order.
+    public static let all: [(label: String, hz: Double)] =
+        [("Low", low), ("Medium", medium), ("High", high)]
+}
+
 public enum DimmingPolicy {
 
     public static func effectiveRunning(userEnabled: Bool, systemSuspended: Bool) -> Bool {
@@ -27,12 +41,14 @@ public enum DimmingPolicy {
 
     /// Menu bar glyph fill: hollow unless effectively running, otherwise the
     /// frequency in use bucketed to the nearest preset — Low 3 Hz → 0.3,
-    /// Medium 6 Hz → 0.5, High 9 Hz → 0.8.
+    /// Medium 6 Hz → 0.5, High 8 Hz → 0.8. The boundaries are the preset
+    /// MIDPOINTS (4.5 between 3 and 6; 7.0 between 6 and 8), so a custom
+    /// frequency lands on whichever preset it is actually closest to.
     public static func glyphFraction(userEnabled: Bool, systemSuspended: Bool, frequencyHz: Double) -> Double {
         guard effectiveRunning(userEnabled: userEnabled, systemSuspended: systemSuspended) else { return 0 }
         switch frequencyHz {
         case ..<4.5: return 0.3
-        case ..<7.5: return 0.5
+        case ..<7.0: return 0.5
         default:     return 0.8
         }
     }

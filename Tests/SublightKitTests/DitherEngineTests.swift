@@ -62,6 +62,14 @@ final class DitherEngineTests: XCTestCase {
         recorder = RecordingCommander()
         diag = EngineDiagnostics()
         engine = DitherEngine(commander: recorder, highLevel: 0.0625, dirtyFlag: flag, diagnostics: diag)
+        // These tests exercise the engine's TIMING logic — alternation, phase
+        // continuity, ramps, the err-dark rule — and deliberately run above the
+        // product's stability ceiling so a test sees dozens of edges in a
+        // fraction of a second instead of waiting out 125 ms periods. The
+        // ceiling is a separate concern with its own suite
+        // (FrequencyCeilingTests); pretending it doesn't exist here would make
+        // every timing assertion in this file a test of the clamp instead.
+        engine.allowsUnstableFrequency = true
     }
 
     override func tearDown() {
@@ -302,5 +310,75 @@ final class DitherEngineTests: XCTestCase {
         wait(for: [started], timeout: 2)
         engine.stopAndRestore(ramp: 0)
         wait(for: [stopped], timeout: 2)
+    }
+}
+
+/// The stability ceiling: a request above it must be honoured as the ceiling,
+/// never silently run as asked. See DitherEngine.maxStableFrequencyHz for the
+/// provenance of the number.
+final class FrequencyCeilingTests: XCTestCase {
+
+    private var tempDir: URL!
+    private var recorder: RecordingCommander!
+    private var engine: DitherEngine!
+
+    override func setUp() {
+        super.setUp()
+        tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sublight-ceiling-\(UUID().uuidString)")
+        recorder = RecordingCommander()
+        engine = DitherEngine(commander: recorder, highLevel: 0.0625,
+                              dirtyFlag: DirtyFlag(directory: tempDir,
+                                                   defaults: UserDefaults(suiteName: "sublight.ceiling.\(UUID().uuidString)")!),
+                              diagnostics: EngineDiagnostics())
+    }
+
+    override func tearDown() {
+        engine.restoreNow()
+        engine = nil
+        try? FileManager.default.removeItem(at: tempDir)
+        super.tearDown()
+    }
+
+    private func wait(_ seconds: TimeInterval) {
+        let e = XCTestExpectation(description: "wait")
+        DispatchQueue.global().asyncAfter(deadline: .now() + seconds) { e.fulfill() }
+        XCTWaiter().wait(for: [e], timeout: seconds + 2)
+    }
+
+    func testFrequencyRangeStopsAtTheMeasuredCeiling() {
+        XCTAssertEqual(DitherEngine.frequencyRange.upperBound, DitherEngine.maxStableFrequencyHz)
+        XCTAssertEqual(DitherEngine.maxStableFrequencyHz, 8.0)
+        XCTAssertGreaterThan(DitherEngine.unstableFrequencyRange.upperBound,
+                             DitherEngine.maxStableFrequencyHz,
+                             "the research range must actually reach past the ceiling")
+    }
+
+    func testAskingForNineRunsAtEight() {
+        engine.start(frequencyHz: 9.0, duty: 0.5)
+        wait(0.1)
+        XCTAssertEqual(engine.state, .running(frequencyHz: 8.0, duty: 0.5))
+        XCTAssertEqual(engine.clampedFrequency(9.0), 8.0)
+        XCTAssertEqual(engine.clampedFrequency(40.0), 8.0)
+        XCTAssertEqual(engine.clampedFrequency(.nan), 8.0, "a non-finite request lands on the ceiling")
+        XCTAssertEqual(engine.clampedFrequency(6.0), 6.0, "a legal request is untouched")
+    }
+
+    func testSetFrequencyIsAlsoClamped() {
+        engine.start(frequencyHz: 6.0, duty: 0.5)
+        wait(0.1)
+        engine.setFrequency(12.0)
+        wait(0.1)
+        XCTAssertEqual(engine.state, .running(frequencyHz: 8.0, duty: 0.5))
+    }
+
+    func testTheResearchOverrideAdmitsNine() {
+        engine.allowsUnstableFrequency = true
+        XCTAssertEqual(engine.clampedFrequency(9.0), 9.0)
+        engine.start(frequencyHz: 9.0, duty: 0.5)
+        wait(0.1)
+        XCTAssertEqual(engine.state, .running(frequencyHz: 9.0, duty: 0.5))
+        XCTAssertEqual(engine.clampedFrequency(100.0), DitherEngine.unstableFrequencyRange.upperBound,
+                       "the override lifts the ceiling, it does not remove all bounds")
     }
 }

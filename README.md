@@ -35,7 +35,7 @@ and are offered as an experimental extra.
 ## ⚠️ Read this first
 
 - **Photosensitivity.** Sublight dims by flickering the backlight, in the
-  2–12 Hz range — which can trigger seizures in people with photosensitive
+  2–8 Hz range — which can trigger seizures in people with photosensitive
   epilepsy. The light is small, dim, and in peripheral vision, so the risk is
   low, but **if you have any history of photosensitivity or epilepsy, do not use
   this app.** See [`DISCLAIMER`](DISCLAIMER).
@@ -92,8 +92,8 @@ warning (with an acknowledgment you have to tick), and an offer to calibrate.
 flicker-free frequency and never mentions Hz. This is the right mode if you just
 want dim keys.
 
-**Advanced mode** exposes the second axis: preset frequencies at **3 / 6 / 9 Hz**,
-a **2–12 Hz** custom slider, and a separate brightness slider. Frequency and
+**Advanced mode** exposes the second axis: preset frequencies at **3 / 6 / 8 Hz**,
+a **2–8 Hz** custom slider, and a separate brightness slider. Frequency and
 brightness are inversely coupled on this hardware — higher frequencies are
 dimmer *and* steadier — so they're presented as two independent knobs.
 
@@ -142,9 +142,15 @@ preferred level. Results are stored per Mac model.
 Behaviour varies by machine. If you run Sublight, please add a row — calibrate, then file a
 **Hardware report** issue (there's a template) or open a PR.
 
-| Model identifier | Mac | macOS | Measured floor | Flicker-free at | Works |
+| Model identifier | Mac | macOS | Measured floor | Stability ceiling | Works |
 |---|---|---|---|---|---|
-| `Mac16,12` | MacBook Air 13" (M4) | 26 | ~0.0625 | ~9 Hz | ✅ |
+| `Mac16,12` | MacBook Air 13" (M4) | 26 | ~0.0625 | 8 Hz (8.5 Hz fails) | ✅ |
+
+**Stability ceiling** is the highest frequency the backlight daemon will actually
+hold. It is a hardware/OS limit, not a claim about your eyes: above it the keys
+fall dark for seconds at a time no matter how perfectly the commands are sent.
+Flicker *fusion* is a separate, personal thing, and on the reference machine the
+dither is still visible as flicker at the ceiling.
 
 ## Known limitations
 

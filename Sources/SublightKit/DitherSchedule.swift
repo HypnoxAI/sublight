@@ -40,7 +40,7 @@ public struct DitherSchedule: Equatable {
         // NaN or 0 would trap in UInt64(...), and a frequency above ~1 GHz
         // would round the period down to 0 nanoseconds and then divide-by-zero
         // in cycle(at:). Callers clamp too; this is the last line of defence.
-        let hz = (frequencyHz.isFinite && (1e-3...1e6).contains(frequencyHz)) ? frequencyHz : 9.0
+        let hz = (frequencyHz.isFinite && (1e-3...1e6).contains(frequencyHz)) ? frequencyHz : DitherEngine.maxStableFrequencyHz
         self.periodNanos = max(1, UInt64((1.0 / hz) * 1_000_000_000))
         self.duty = Self.clampDuty(duty)
     }

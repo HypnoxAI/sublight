@@ -45,11 +45,18 @@ func printUsage() {
       sublight-cli hold <0..1> [options]      Dither-hold a sub-minimum level (Ctrl-C restores)
       sublight-cli pair-sweep --on-ms <X>     DIAGNOSTIC: raw ON/OFF pairs straight at the
                                               bridge (engine bypassed) — one ON-window per run
-      sublight-cli pulse <low|medium|high>     Continuous pulse preset (~5/6/10 Hz). Experimental;
+      sublight-cli pulse <low|medium|high>     Continuous pulse preset (~5/6/8 Hz). Experimental;
                                               flickers in the photosensitive range. Ctrl-C stops.
       sublight-cli restore [<0..1>]           Panic restore (default lands at 0.30)
       sublight-cli notify-probe               Spike: can the change-notification tell your
                                               keypress from our writes? (interactive)
+
+    STABILITY CEILING:
+      The engine refuses to dither above a MEASURED ceiling (8.0 Hz on the
+      reference machine — see DitherEngine.maxStableFrequencyHz). A higher
+      request is clamped and the clamp is logged. `--allow-unstable` lifts it
+      for re-measurement only; above the ceiling the daemon stops honouring the
+      dither and the keys fall dark for seconds at a time.
 
     HOLD OPTIONS:
       --floor <f>     Assumed system clamp floor        (default 0.0625)
@@ -71,6 +78,8 @@ func printUsage() {
                           edge never parks on a sub-floor value.
       --pad-offset <f>    Padding offset (default 0.002; small enough to stay inside
                           the same 1/16 output step)
+      --allow-unstable    RESEARCH ONLY: lift the measured stability ceiling so a
+                          frequency above it is honoured instead of clamped.
 
     PAIR-SWEEP OPTIONS (diagnostic; bypasses the engine):
       --on-ms <X>     ON window in milliseconds         (required)
@@ -285,6 +294,14 @@ func makeController(args: [String]) -> BacklightController? {
             return nil
         }
         let controller = try BacklightController(floor: floor)
+        // BEFORE any frequency assignment, or the assignment clamps first.
+        if args.contains("--allow-unstable") {
+            controller.allowsUnstableFrequency = true
+            fputs("warning: --allow-unstable lifts the measured "
+                  + String(format: "%.1f", DitherEngine.maxStableFrequencyHz)
+                  + " Hz stability ceiling. Above it the daemon stops honouring the dither"
+                  + " and the keys fall dark for seconds at a time. Research use only.\n", stderr)
+        }
         if let period { controller.period = period }
         if let freq { controller.frequencyHz = freq }
 
@@ -1020,14 +1037,17 @@ case "pair-sweep":
 
 case "pulse":
     let modeArg = args.count > 1 ? args[1] : ""
-    // All three live in the ~5–8 Hz band — the only range this hardware can
-    // actually flicker (above ~8 Hz the daemon coalesces it into steady floor).
-    // These are NOT the theta/alpha/beta spread; they're a low-band gradient,
-    // and any neurological effect is unproven. Named for a subjective low→high feel.
-    let presets: [String: Double] = ["low": 5.0, "medium": 6.0, "high": 10.0]
+    // All three sit at or below the measured stability ceiling (8.0 Hz). The
+    // old "high" was 10 Hz, which is past it: on the reference machine that
+    // frequency drops the keys into multi-second dark envelopes, and the engine
+    // now clamps it regardless. These are NOT the theta/alpha/beta spread;
+    // they're a low-band gradient, and any neurological effect is unproven.
+    // Named for a subjective low→high feel.
+    let presets: [String: Double] = ["low": 5.0, "medium": 6.0,
+                                     "high": DitherEngine.maxStableFrequencyHz]
     guard let freq = presets[modeArg.lowercased()] else {
         fputs("usage: sublight-cli pulse <low|medium|high> [--duty d]\n", stderr)
-        fputs("  low ≈ 5 Hz,  medium ≈ 6 Hz,  high ≈ 10 Hz — the band this hardware can flicker.\n", stderr)
+        fputs("  low ≈ 5 Hz,  medium ≈ 6 Hz,  high ≈ 8 Hz — the band this hardware can flicker.\n", stderr)
         exit(1)
     }
     guard let c = makeController(args: args) else { exit(2) }

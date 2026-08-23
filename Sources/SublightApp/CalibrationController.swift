@@ -17,7 +17,7 @@
 //
 //    2. FLICKER-FREE FREQUENCY (subjective).  The lowest dither frequency
 //       that still looks steady TO THIS PERSON. Flicker fusion varies by
-//       individual, so 9 Hz being smooth here says nothing about anyone else.
+//       individual, so 8 Hz being smooth here says nothing about anyone else.
 //       Bisect on "steady or pulsing?".
 //
 //    3. PREFERRED LEVEL (subjective).  Not a bisection — a live slider, since
@@ -58,7 +58,12 @@ final class CalibrationController: ObservableObject {
     private static let floorFloor: Float = 0.005
     private static let floorCeil: Float = 0.30
     private static let freqFloor: Double = 2.0
-    private static let freqCeil: Double = 11.0
+    /// The ladder stops at the measured stability ceiling. Searching above it
+    /// would let calibration "discover" a frequency that reads steady only
+    /// because the daemon has stopped honouring the dither — which is exactly
+    /// the failure this ceiling exists to prevent, and Simple mode adopts
+    /// whatever this returns.
+    private static let freqCeil: Double = DitherEngine.maxStableFrequencyHz
     static let rounds = 5
     /// Enough cycles to be sure, short enough not to be tedious (~6 s).
     private static let floorAlternations = 6
@@ -240,7 +245,7 @@ final class CalibrationController: ObservableObject {
 
     func applyPreview() {
         let floor = measuredFloor ?? restoreFloor
-        let f = measuredFrequency ?? 9.0
+        let f = measuredFrequency ?? FrequencyPreset.high
         controller.frequencyHz = f
         controller.setLevel(Float(previewLevel) * floor)
     }
