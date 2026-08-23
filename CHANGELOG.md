@@ -10,7 +10,14 @@ stability on.
 
 ## [Unreleased]
 
+### Planned
+
+- Developer ID signing, notarization, and a DMG.
+
+## [0.4.0] — 2026-08-23
+
 ### Added
+
 - **Informed consent before the first backlight command.** Sublight's only
   mechanism is flicker, every mode it can offer sits in the 3–30 Hz
   photosensitive band, and none of them is flicker-free — so the first time
@@ -44,63 +51,6 @@ stability on.
   conditions, how to recover a stuck backlight, and why a read-back value is
   not evidence and your eyes are.
 
-### Changed
-- **The docs no longer claim a flicker-free mode, because there isn't one.**
-  `SPEC.md`, `ROADMAP.md` and `APPSTORE_AND_HEALTH.md` described ~10 Hz as
-  fusing into a steady, dim, flicker-free glow and framed the limit as command
-  coalescing. Measurement contradicts both: the limit is on the cycle *period*,
-  and 10 Hz is above it. Those documents now carry the measured story and a
-  dated note saying what was retracted and why — the old claims are marked, not
-  erased. The README's own opening paragraph said the same thing and now says
-  the true one. A new "How it works — and what could break" section records
-  which macOS build and hardware the private interface was verified against,
-  how the launch probe self-disables on drift, the five-minute ritual for
-  re-qualifying the ceiling after an update, and what related projects do and
-  do not do.
-
-### Fixed
-- **High mode's long-standing irregularity was never the engine — it was a
-  daemon-side cycle-period limit, and the presets sat on the wrong side of
-  it.** Above roughly 8.5 Hz the backlight daemon stops honouring the dither
-  and the keys fall completely dark for a second or more at a time, repeating
-  every one to three seconds. This is not command coalescing (the old
-  explanation) and not flicker fusion: it is a hard limit on how short a
-  dither cycle the daemon will act on — 117.6 ms fails, 125.0 ms holds. Duty
-  makes no difference, the ON window makes no difference, and neither
-  read-back API can see it. It is the period specifically and not the
-  command rate: pushing 24 writes/s through an unchanged 166.7 ms period
-  stays perfectly steady, including when the extra writes deliberately
-  cross a 1/16 output step so that no form of daemon-side de-duplication
-  can be quietly discarding them. The old re-armed-after-each-XPC engine drifted
-  slower than requested and so spent much of its time *below* the limit,
-  which is why this read as intermittent "jitter" for so long; the anchored
-  rewrite hits the requested period exactly and put High mode squarely on the
-  wrong side of it every time.
-- **The engine is exonerated, with numbers.** Command-truth instrumentation
-  put 9,270 dither edges through scheduled/fired/executed/skipped counters
-  across fifteen runs: 9,265 executed, 5 benign isolated skips, zero timer
-  coalescing, zero rejected commands, and daemon round trips with a p50 of
-  0.15 ms. The dark envelopes happened while commands were arriving on
-  schedule and being accepted.
-- **Presets re-homed to 3 / 6 / 8 Hz behind an enforced 8.0 Hz ceiling.** High
-  was 9 Hz — above the boundary. It is now defined AS
-  `DitherEngine.maxStableFrequencyHz`, which is the lowest frequency ever
-  observed to fail (8.5 Hz) less a 0.5 Hz margin, verified by a five-minute
-  soak at 8.0 Hz with 2,401 of 2,401 edges executed and no envelope. The
-  engine clamps any higher request and logs the clamp; the Advanced slider,
-  Simple mode, the schedule, `pulse high`, and calibration's search ladder all
-  stop at the ceiling, and a stored calibration above it is clamped down on
-  load. `sublight-cli --allow-unstable` lifts it for re-measurement; the app
-  has no path past it. Measured on Mac16,12 / macOS 26.6.1 — re-qualify after
-  a macOS update with the soak ritual in `README.md`.
-- **Quitting without ever dimming no longer touches your backlight.** The exit
-  restore forced auto-brightness on and a level of 0.4 unconditionally, so
-  simply launching Sublight and quitting overwrote whatever you had set by
-  hand. It is now gated on whether the process ever issued a backlight
-  command; once it has, the forced restore behaves exactly as before, so
-  calibration's ambient-sensor suppression is still always undone.
-
-### Added
 - **Write padding** (`hold --pad-writes [--pad-offset f]`), a diagnostic that
   sends every edge command twice — first the value offset by ~0.002, then the
   value itself — doubling the command rate at an unchanged cycle period. The
@@ -146,30 +96,6 @@ stability on.
   block) and **hardware reports** (feeding the README compatibility table), a
   PR template with the DCO checklist, and a security policy.
 
-### Fixed
-- The app bundle shipped with a `com.example` placeholder bundle identifier;
-  it is now `com.hypnox.sublight`.
-
-### Changed
-- **v1 brand mark on every surface.** The app icon (Finder, Get Info,
-  Spotlight) is now the amber-ringed keyboard tile with hollow/filled keys;
-  the README carries the animated logo (2.8 s cycle, ~0.36 Hz — far below the
-  photosensitivity band) and an off/on pair. The **menu bar glyph is drawn in
-  code** (`StatusGlyph.swift`) and reflects state: keys hollow while idle,
-  filling from the right as dimming engages, with the fill level mapped to
-  the frequency bucket (0 / 0.3 / 0.5 / 0.8 for off / ≈3 Hz / ≈6 Hz / ≈9 Hz).
-  Still a monochrome template image, as macOS requires.
-- **librsvg icon pipeline retired.** `make_icons.sh` and the old SVG sources
-  are gone; `make_app.sh` builds the `.icns` from the committed 1024px PNG
-  master at bundle time with `sips` + `iconutil`, which ship with macOS.
-- **Calibration's floor step now asks "does it flicker?" instead of "was that
-  brighter?"** The two levels alternate at ~1 Hz rather than being shown once
-  each. The original phrasing required remembering a brightness across a
-  two-second gap and produced results that contradicted each other between
-  sessions — on the reference machine it settled on a floor roughly twice the
-  real one. Flicker detection is far more sensitive and immediate.
-
-### Added
 - **Solar scheduling.** The schedule can now run from sunset to sunrise instead
   of fixed times. Location is chosen from a bundled list of ~110 cities, and is
   pre-filled on first run by matching the Mac's own time zone — so in most cases
@@ -189,8 +115,84 @@ stability on.
 - `ScheduleWindow` extracted into SublightKit so the time-of-day logic is pure
   and testable rather than buried in the app layer.
 
-### Planned
-- Developer ID signing, notarization, and a DMG.
+### Changed
+
+- **The docs no longer claim a flicker-free mode, because there isn't one.**
+  `SPEC.md`, `ROADMAP.md` and `APPSTORE_AND_HEALTH.md` described ~10 Hz as
+  fusing into a steady, dim, flicker-free glow and framed the limit as command
+  coalescing. Measurement contradicts both: the limit is on the cycle *period*,
+  and 10 Hz is above it. Those documents now carry the measured story and a
+  dated note saying what was retracted and why — the old claims are marked, not
+  erased. The README's own opening paragraph said the same thing and now says
+  the true one. A new "How it works — and what could break" section records
+  which macOS build and hardware the private interface was verified against,
+  how the launch probe self-disables on drift, the five-minute ritual for
+  re-qualifying the ceiling after an update, and what related projects do and
+  do not do.
+
+- **v1 brand mark on every surface.** The app icon (Finder, Get Info,
+  Spotlight) is now the amber-ringed keyboard tile with hollow/filled keys;
+  the README carries the animated logo (2.8 s cycle, ~0.36 Hz — far below the
+  photosensitivity band) and an off/on pair. The **menu bar glyph is drawn in
+  code** (`StatusGlyph.swift`) and reflects state: keys hollow while idle,
+  filling from the right as dimming engages, with the fill level mapped to
+  the frequency bucket (0 / 0.3 / 0.5 / 0.8 for off / ≈3 Hz / ≈6 Hz / ≈9 Hz).
+  Still a monochrome template image, as macOS requires.
+- **librsvg icon pipeline retired.** `make_icons.sh` and the old SVG sources
+  are gone; `make_app.sh` builds the `.icns` from the committed 1024px PNG
+  master at bundle time with `sips` + `iconutil`, which ship with macOS.
+- **Calibration's floor step now asks "does it flicker?" instead of "was that
+  brighter?"** The two levels alternate at ~1 Hz rather than being shown once
+  each. The original phrasing required remembering a brightness across a
+  two-second gap and produced results that contradicted each other between
+  sessions — on the reference machine it settled on a floor roughly twice the
+  real one. Flicker detection is far more sensitive and immediate.
+
+### Fixed
+
+- **High mode's long-standing irregularity was never the engine — it was a
+  daemon-side cycle-period limit, and the presets sat on the wrong side of
+  it.** Above roughly 8.5 Hz the backlight daemon stops honouring the dither
+  and the keys fall completely dark for a second or more at a time, repeating
+  every one to three seconds. This is not command coalescing (the old
+  explanation) and not flicker fusion: it is a hard limit on how short a
+  dither cycle the daemon will act on — 117.6 ms fails, 125.0 ms holds. Duty
+  makes no difference, the ON window makes no difference, and neither
+  read-back API can see it. It is the period specifically and not the
+  command rate: pushing 24 writes/s through an unchanged 166.7 ms period
+  stays perfectly steady, including when the extra writes deliberately
+  cross a 1/16 output step so that no form of daemon-side de-duplication
+  can be quietly discarding them. The old re-armed-after-each-XPC engine drifted
+  slower than requested and so spent much of its time *below* the limit,
+  which is why this read as intermittent "jitter" for so long; the anchored
+  rewrite hits the requested period exactly and put High mode squarely on the
+  wrong side of it every time.
+- **The engine is exonerated, with numbers.** Command-truth instrumentation
+  put 9,270 dither edges through scheduled/fired/executed/skipped counters
+  across fifteen runs: 9,265 executed, 5 benign isolated skips, zero timer
+  coalescing, zero rejected commands, and daemon round trips with a p50 of
+  0.15 ms. The dark envelopes happened while commands were arriving on
+  schedule and being accepted.
+- **Presets re-homed to 3 / 6 / 8 Hz behind an enforced 8.0 Hz ceiling.** High
+  was 9 Hz — above the boundary. It is now defined AS
+  `DitherEngine.maxStableFrequencyHz`, which is the lowest frequency ever
+  observed to fail (8.5 Hz) less a 0.5 Hz margin, verified by a five-minute
+  soak at 8.0 Hz with 2,401 of 2,401 edges executed and no envelope. The
+  engine clamps any higher request and logs the clamp; the Advanced slider,
+  Simple mode, the schedule, `pulse high`, and calibration's search ladder all
+  stop at the ceiling, and a stored calibration above it is clamped down on
+  load. `sublight-cli --allow-unstable` lifts it for re-measurement; the app
+  has no path past it. Measured on Mac16,12 / macOS 26.6.1 — re-qualify after
+  a macOS update with the soak ritual in `README.md`.
+- **Quitting without ever dimming no longer touches your backlight.** The exit
+  restore forced auto-brightness on and a level of 0.4 unconditionally, so
+  simply launching Sublight and quitting overwrote whatever you had set by
+  hand. It is now gated on whether the process ever issued a backlight
+  command; once it has, the forced restore behaves exactly as before, so
+  calibration's ambient-sensor suppression is still always undone.
+
+- The app bundle shipped with a `com.example` placeholder bundle identifier;
+  it is now `com.hypnox.sublight`.
 
 ## [0.3.0] — 2026-07-24
 

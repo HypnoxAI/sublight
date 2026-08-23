@@ -23,6 +23,7 @@ func printUsage() {
     sublight-cli — sub-minimum keyboard backlight control (Apple Silicon)
 
     USAGE:
+      sublight-cli version                    Print the version and exit
       sublight-cli status                     Show keyboard ID, brightness, auto-brightness
       sublight-cli ids                        List keyboard backlight IDs
       sublight-cli dump                       Print KeyboardBrightnessClient's REAL runtime
@@ -538,7 +539,7 @@ guard let command = args.first else {
 // command the backlight, and they are how a failing probe gets diagnosed.
 // `glyph` joins the exempt list: it draws pictures and never speaks to the
 // daemon, so it must not require a verified private-API surface to run.
-if !["help", "--help", "-h", "sig", "signatures", "dump", "glyph", "social-preview"].contains(command) {
+if !["help", "--help", "-h", "version", "--version", "-V", "sig", "signatures", "dump", "glyph", "social-preview"].contains(command) {
     let report = validateAPISurface()
     if !report.passed {
         fputs(report.text + "\n", stderr)
@@ -565,6 +566,10 @@ switch command {
 
 case "help", "--help", "-h":
     printUsage()
+    exit(0)
+
+case "version", "--version", "-V":
+    print("sublight-cli \(SublightVersion.display)")
     exit(0)
 
 case "status":

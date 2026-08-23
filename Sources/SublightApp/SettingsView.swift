@@ -300,7 +300,7 @@ private struct AboutTab: View {
     @EnvironmentObject var state: AppState
 
     private static let version: String =
-        (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "0.3"
+        (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? SublightVersion.current
 
     var body: some View {
         VStack(spacing: 6) {

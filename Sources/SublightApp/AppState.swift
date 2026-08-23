@@ -453,7 +453,7 @@ final class AppState: ObservableObject {
     var diagnosticsReport: String {
         let os = ProcessInfo.processInfo.operatingSystemVersion
         let info = Bundle.main.infoDictionary
-        let version = (info?["CFBundleShortVersionString"] as? String) ?? "?"
+        let version = (info?["CFBundleShortVersionString"] as? String) ?? SublightVersion.current
         let build = (info?["CFBundleVersion"] as? String) ?? "?"
 
         let locationDescription: String

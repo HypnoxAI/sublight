@@ -28,6 +28,22 @@ mkdir -p "${APP}/Contents/MacOS" "${APP}/Contents/Resources"
 cp "${BIN}" "${APP}/Contents/MacOS/Sublight"
 cp scripts/Info.plist "${APP}/Contents/Info.plist"
 
+# Stamp the version from the Swift constant so the bundle and the code can
+# never disagree — a wrong version in a bug report costs more to chase than
+# this line costs to maintain.
+VERSION_SRC="Sources/SublightKit/SublightVersion.swift"
+MARKETING=$(sed -n 's/.*static let current = "\([^"]*\)".*/\1/p' "$VERSION_SRC")
+BUILDNUM=$(sed -n 's/.*static let build = "\([^"]*\)".*/\1/p' "$VERSION_SRC")
+if [ -z "$MARKETING" ] || [ -z "$BUILDNUM" ]; then
+  echo "error: could not read the version from $VERSION_SRC" >&2
+  exit 1
+fi
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $MARKETING" \
+  "${APP}/Contents/Info.plist" >/dev/null
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILDNUM" \
+  "${APP}/Contents/Info.plist" >/dev/null
+echo "==> version ${MARKETING} (${BUILDNUM})"
+
 echo "==> icons"
 # The .icns is a GENERATED artifact built from the committed 1024px PNG master
 # with tools every Mac ships (sips + iconutil) — no librsvg needed. It lands
