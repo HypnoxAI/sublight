@@ -697,7 +697,8 @@ final class AppState: ObservableObject {
 
     private func onCityChanged() {
         defaults.set(cityID, forKey: Keys.city)
-        guard let city = CityDirectory.city(id: cityID) else { return }  // custom: leave as typed
+        // A custom entry has no table row; leave the typed coordinates alone.
+        guard let city = CityDirectory.city(id: cityID) else { return }
         latitude = city.latitude
         longitude = city.longitude
     }

@@ -38,7 +38,8 @@ final class DitherScheduleTests: XCTestCase {
         // divide-by-zero in cycle(at:). The init floors periodNanos at 1.
         let s = DitherSchedule(anchorNanos: anchor, frequencyHz: 1e12, duty: 0.5)
         XCTAssertGreaterThanOrEqual(s.periodNanos, 1)
-        XCTAssertEqual(s.cycle(at: anchor + 1_000_000), s.cycle(at: anchor + 1_000_000))  // no trap
+        // Must not trap.
+        XCTAssertEqual(s.cycle(at: anchor + 1_000_000), s.cycle(at: anchor + 1_000_000))
         // Non-finite falls back to a safe default.
         let n = DitherSchedule(anchorNanos: anchor, frequencyHz: .nan, duty: 0.5)
         XCTAssertGreaterThan(n.periodNanos, 0)
@@ -63,7 +64,8 @@ final class DitherScheduleTests: XCTestCase {
     }
 
     func testNextLowIsStrictlyInTheFuture() {
-        let s = DitherSchedule(anchorNanos: anchor, frequencyHz: 10, duty: 0.5)   // period 100 ms, LOW at +50 ms
+        // Period 100 ms, LOW at +50 ms.
+        let s = DitherSchedule(anchorNanos: anchor, frequencyHz: 10, duty: 0.5)
         let ms: UInt64 = 1_000_000
         // Mid-cycle, before this cycle's LOW: this cycle's LOW.
         XCTAssertEqual(s.nextLowDeadline(after: anchor + 320 * ms), anchor + 350 * ms)
@@ -77,7 +79,8 @@ final class DitherScheduleTests: XCTestCase {
 
     func testSetDutyPhaseContinuityNeverSchedulesIntoThePast() {
         let ms: UInt64 = 1_000_000
-        let s = DitherSchedule(anchorNanos: anchor, frequencyHz: 10, duty: 0.8)   // LOW at +80 ms
+        // LOW at +80 ms.
+        let s = DitherSchedule(anchorNanos: anchor, frequencyHz: 10, duty: 0.8)
         // Mid-phase, 60 ms in, duty drops to 0.3 (LOW would have been at +30 ms, now past).
         let t = s.withDuty(0.3)
         let now = anchor + 3 * 100 * ms + 60 * ms

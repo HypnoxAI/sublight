@@ -1,0 +1,22 @@
+# Matches CONTRIBUTING's stated expectations and .swift-format, so an editor
+# that reads this and a `swift format` run agree rather than fighting.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.swift]
+indent_style = space
+indent_size = 4
+max_line_length = 90
+
+[*.{yml,yaml,json}]
+indent_style = space
+indent_size = 2
+
+[*.md]
+# Markdown gives meaning to trailing double-spaces.
+trim_trailing_whitespace = false

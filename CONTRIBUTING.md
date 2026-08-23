@@ -85,8 +85,23 @@ roughly 0:30, 2:30 and 4:30.
 
 ## Formatting and style
 
-No formatter is enforced; match the file you are editing. Four-space indent,
-roughly 80–90 columns, and `// MARK:` sections in longer types.
+Formatting is enforced by the toolchain's own formatter — no extra tool to
+install, in keeping with the zero-dependency rule:
+
+```bash
+swift format lint --strict --recursive Sources Tests Package.swift   # what CI runs
+swift format --recursive --in-place Sources Tests Package.swift      # fix it
+```
+
+`.swift-format` and `.editorconfig` hold the settings and agree with each other:
+four-space indent, 90 columns. Both are the written form of what this file used
+to describe in prose.
+
+The ruleset deliberately does **not** enable everything. Rules that restructure
+working code rather than normalise its layout are off — semicolon splitting,
+one-variable-per-line, `forEach` rewriting, lowerCamelCase enforcement (`Solar`
+uses `M` and `Mrad` because that is what the astronomical literature calls them).
+Layout is the formatter's business; how the code is written is the author's.
 
 Comments here carry more weight than usual. The codebase documents *why* —
 which alternative was tried, what the hardware actually did, why an obvious

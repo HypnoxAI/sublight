@@ -208,7 +208,8 @@ final class DitherEngineTests: XCTestCase {
         engine.restoreNow()
         let n = recorder.commands.count
         XCTAssertEqual(recorder.commands.last, .restore(0.4))
-        engine.stopAndRestore(ramp: 0.25)   // already stopped and not engaged → nothing to command
+        // Already stopped and not engaged → nothing to command.
+        engine.stopAndRestore(ramp: 0.25)
         wait(0.1)
         XCTAssertEqual(recorder.commands.count, n)
     }
