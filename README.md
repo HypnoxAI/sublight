@@ -38,7 +38,7 @@ daemon's cycle-period limit, and the read-back APIs that lie are documented in
 
 | Simple — one switch and a brightness slider | Advanced — presets, custom frequency, schedule |
 |---|---|
-| ![Sublight's menu bar popover in Simple mode, status "Off": a Simple/Advanced mode switch, a "Dim keyboard below minimum" toggle in the off position, and a Schedule toggle](assets/screenshots/popover-simple.png) | ![Sublight's popover in Advanced mode, status "Dimming · 8.0 Hz": Low/Medium/High preset buttons, a frequency slider at 8.0 Hz, a brightness slider, and a sunset-to-sunrise schedule showing 7:43 PM to 6:14 AM](assets/screenshots/popover-advanced.png) |
+| ![Sublight's menu bar popover in Simple mode, status "Dimming": a Simple/Advanced mode switch, a "Dim keyboard below minimum" toggle switched on with a brightness slider beneath it, a Schedule toggle, and a "Restore system control" button. No frequency is shown — Simple mode never mentions Hz.](assets/screenshots/popover-simple.png) | ![Sublight's popover in Advanced mode, status "Dimming · 8.0 Hz": Low/Medium/High preset buttons, a frequency slider at 8.0 Hz, a brightness slider, and a sunset-to-sunrise schedule showing 7:43 PM to 6:14 AM](assets/screenshots/popover-advanced.png) |
 
 **Asked once, before the backlight is ever touched.** Declining records nothing
 and changes nothing:
