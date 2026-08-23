@@ -85,9 +85,10 @@ public final class DitherEngine {
     ///     soak clean (2401/2401 edges, zero skips). In period terms 117.6 ms
     ///     fails and 125.0 ms holds.
     ///   • Causal variable is the CYCLE PERIOD, not the command rate: doubling
-    ///     the writes per cycle at a fixed period stayed steady. (Open caveat:
-    ///     a dedupe keyed on the 1/16 output step rather than the exact value
-    ///     would mimic that result.)
+    ///     the writes per cycle at a fixed period (24/s through a 166.7 ms
+    ///     period) stayed steady. Confirmed with padding that CROSSES a 1/16
+    ///     output step, so no dedupe — by exact value or by step — can be
+    ///     swallowing the extra writes and faking the result.
     ///   • NOT the engine. Across 9,270 HIGH edges the engine executed 9,265,
     ///     skipped 5 benign isolated cycles, coalesced none, and the daemon
     ///     rejected nothing. The failure is entirely daemon-side.

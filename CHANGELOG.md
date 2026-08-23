@@ -19,7 +19,11 @@ stability on.
   explanation) and not flicker fusion: it is a hard limit on how short a
   dither cycle the daemon will act on — 117.6 ms fails, 125.0 ms holds. Duty
   makes no difference, the ON window makes no difference, and neither
-  read-back API can see it. The old re-armed-after-each-XPC engine drifted
+  read-back API can see it. It is the period specifically and not the
+  command rate: pushing 24 writes/s through an unchanged 166.7 ms period
+  stays perfectly steady, including when the extra writes deliberately
+  cross a 1/16 output step so that no form of daemon-side de-duplication
+  can be quietly discarding them. The old re-armed-after-each-XPC engine drifted
   slower than requested and so spent much of its time *below* the limit,
   which is why this read as intermittent "jitter" for so long; the anchored
   rewrite hits the requested period exactly and put High mode squarely on the
