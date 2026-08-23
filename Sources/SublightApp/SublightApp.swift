@@ -12,21 +12,25 @@
 //    1. The label must resolve to a SINGLE static view. A conditional VIEW
 //       (`if let … else …`) produces an invisible menu bar item — the click
 //       target exists but nothing draws.
-//    2. The asset is a PNG, not a PDF. The glyph is built from an SVG mask,
-//       and rsvg-convert flattens masks into PDF soft-masks that NSImage
-//       does not reliably rasterise: the PDF loads fine (so no fallback
-//       kicks in) and then draws nothing.
+//    2. No PDF assets. An earlier glyph was built from an SVG mask, and
+//       rsvg-convert flattens masks into PDF soft-masks that NSImage does
+//       not reliably rasterise: the PDF loads fine (so no fallback kicks in)
+//       and then draws nothing. The glyph is now drawn in code (StatusGlyph)
+//       so there is no asset pipeline to get this wrong.
 //    3. Size by HEIGHT with aspect preserved — the glyph is wider than tall,
-//       and forcing it square squashes it.
-//    4. State is opacity applied by SwiftUI, not a second NSImage built by
-//       hand. Redrawing a template image into a new bitmap to fade it is
-//       another way to end up with a blank icon; `.opacity()` on the view is
-//       both simpler and safe. Opacity rather than colour, because a
+//       and forcing it square squashes it. StatusGlyph draws on an 18×18 pt
+//       canvas, the standard status item size, so no resizing happens here.
+//    4. State is the FILL LEVEL of the keys, carried by one memoized
+//       drawing-handler NSImage per discrete state (StatusGlyph.image).
+//       This replaces the earlier opacity-on-the-view approach. The failure
+//       mode that approach avoided was re-rasterising a template image into a
+//       hand-built bitmap, which can yield a blank icon; a drawing-handler
+//       NSImage is different — AppKit invokes the handler per backing scale,
+//       so it stays crisp and renders reliably as a template. Memoizing per
+//       state means slider drags swap between stable instances rather than
+//       constructing fresh images. Fill rather than colour, because a
 //       coloured menu bar icon looks foreign on macOS and breaks in
 //       high-contrast modes.
-//
-//  Falls back to an SF Symbol when the bundled resource is absent (e.g.
-//  running the bare binary via `swift run` rather than the assembled .app).
 //
 //  Licensed under the Apache License 2.0 — see LICENSE.
 //
@@ -40,33 +44,6 @@ struct SublightApp: App {
 
     @StateObject private var state = AppState()
 
-    private static let menuBarIcon: NSImage = {
-        // 16pt, not 18: measured against macOS's own status icons, the
-        // taller version was ~28pt wide and carried roughly three times
-        // the ink of a typical outline glyph — it read as oversized.
-        let height: CGFloat = 16
-
-        if let url = Bundle.main.url(forResource: "sublight-menubar-Template", withExtension: "png"),
-           let image = NSImage(contentsOf: url),
-           image.size.height > 0, image.size.width > 0 {
-            let aspect = image.size.width / image.size.height
-            image.size = NSSize(width: (height * aspect).rounded(), height: height)
-            image.isTemplate = true
-            Log.lifecycle.info("menu bar glyph loaded from bundle")
-            return image
-        }
-
-        Log.lifecycle.warning("menu bar glyph missing — using SF Symbol fallback")
-        if let symbol = NSImage(systemSymbolName: "keyboard", accessibilityDescription: "Sublight") {
-            symbol.isTemplate = true
-            return symbol
-        }
-
-        let blank = NSImage(size: NSSize(width: height, height: height))
-        blank.isTemplate = true
-        return blank
-    }()
-
     init() {
         NSApplication.shared.setActivationPolicy(.accessory)
     }
@@ -76,9 +53,9 @@ struct SublightApp: App {
             MenuView()
                 .environmentObject(state)
         } label: {
-            // One Image view, always. Only its opacity varies with state.
-            Image(nsImage: Self.menuBarIcon)
-                .opacity(state.isEnabled ? 1.0 : 0.55)
+            // One Image view, always. Only the keys' fill level varies with
+            // state: hollow when idle, filling from the right with frequency.
+            Image(nsImage: StatusGlyph.image(litFraction: state.glyphFraction))
                 .accessibilityLabel("Sublight")
                 .accessibilityValue(state.isEnabled ? "dimming" : "idle")
         }

@@ -1,6 +1,8 @@
-<div align="center">
+<p align="center">
+  <img src="assets/icons/sublight-logo-animated.svg" width="200" alt="Sublight">
+</p>
 
-<img src="assets/icons/sublight-hero.png" width="200" alt="Sublight">
+<div align="center">
 
 # Sublight
 
@@ -55,8 +57,6 @@ and are offered as an experimental extra.
   **only on macOS 26** on a MacBook Air (M4). Earlier versions should work — the
   APIs used are available — but are untested. Reports welcome.
 - Xcode Command Line Tools (`xcode-select --install`)
-- `librsvg` for icon generation (`brew install librsvg`) — optional; without it
-  the app falls back to a system icon.
 
 ## Install
 
@@ -81,8 +81,9 @@ swift build -c release --product sublight-cli
 
 ## Using it
 
-Sublight lives in the menu bar — no Dock icon, no window. The glyph is faded
-when idle and solid while dimming.
+Sublight lives in the menu bar — no Dock icon, no window. The glyph's keys are
+hollow while the backlight is under system control and fill from the right as
+Sublight takes over.
 
 **First launch** walks through a short onboarding: what the app does, the safety
 warning (with an acknowledgment you have to tick), and an offer to calibrate.
@@ -95,6 +96,10 @@ want dim keys.
 a **2–12 Hz** custom slider, and a separate brightness slider. Frequency and
 brightness are inversely coupled on this hardware — higher frequencies are
 dimmer *and* steadier — so they're presented as two independent knobs.
+
+| Off — system control | On — Sublight active |
+|---|---|
+| ![off](assets/icons/sublight-icon-off-1024.png) | ![on](assets/icons/sublight-icon-1024.png) |
 
 **Schedule** dims automatically, either between two fixed times or from
 **sunset to sunrise**. It acts on transitions, so you can still override it by

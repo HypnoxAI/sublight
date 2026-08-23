@@ -11,11 +11,3 @@ DerivedData/
 
 # macOS
 .DS_Store
-
-# Generated icon artifacts (make_app.sh regenerates them; see assets/icons/make_icons.sh)
-assets/icons/Sublight.icns
-assets/icons/Sublight.iconset/
-assets/icons/sublight-menubar-Template.png
-assets/icons/sublight-menubar-preview.png
-# The README hero is generated too, but GitHub must serve it — keep it committed.
-!assets/icons/sublight-hero.png

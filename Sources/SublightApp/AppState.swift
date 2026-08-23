@@ -269,6 +269,19 @@ final class AppState: ObservableObject {
         advancedMode ? frequencyHz : (calibratedFrequency ?? Self.simpleFreq)
     }
 
+    /// Fill level for the menu bar glyph (StatusGlyph): hollow when idle,
+    /// otherwise the frequency actually in use bucketed to the nearest preset —
+    /// Low 3 Hz → 0.3, Medium 6 Hz → 0.5, High 9 Hz → 0.8. Simple mode runs at
+    /// ~9 Hz, so it shows the High fill.
+    var glyphFraction: CGFloat {
+        guard isEnabled else { return 0 }
+        switch effectiveFrequency {
+        case ..<4.5: return 0.3
+        case ..<7.5: return 0.5
+        default:     return 0.8
+        }
+    }
+
     /// A plain-text report for bug reports and support threads.
     ///
     /// PRIVACY: deliberately reports the chosen *city* — or merely the fact

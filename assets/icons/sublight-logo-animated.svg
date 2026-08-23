@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+<!-- Sublight: sub-minimum keyboard backlight for Apple Silicon MacBooks -->
+<style>
+.k{animation:fillwave 2.8s ease-in-out infinite}
+@keyframes fillwave{0%,100%{fill-opacity:0}50%{fill-opacity:1}}
+.c0{animation-delay:0.00s}
+.c1{animation-delay:-0.14s}
+.c2{animation-delay:-0.28s}
+.c3{animation-delay:-0.42s}
+.c4{animation-delay:-0.56s}
+.c5{animation-delay:-0.70s}
+.c6{animation-delay:-0.84s}
+.c7{animation-delay:-0.98s}
+.c8{animation-delay:-1.12s}
+.ring{animation:ringpulse 5.6s ease-in-out infinite}
+@keyframes ringpulse{0%,100%{opacity:1}50%{opacity:0.7}}
+@media (prefers-reduced-motion: reduce){.k,.ring{animation:none}}
+</style><defs><clipPath id="kbclip"><path d="M 336.0 340.0 L 688.0 340.0 Q 714.0 340.0 718.5 365.6 L 773.5 678.4 Q 778.0 704.0 752.0 704.0 L 272.0 704.0 Q 246.0 704.0 250.5 678.4 L 305.5 365.6 Q 310.0 340.0 336.0 340.0 Z"/></clipPath></defs>
+<rect width="1024" height="1024" fill="#000000"/>
+<rect x="92" y="92" width="840" height="840" rx="178" fill="none" stroke="#EFA00E" stroke-width="44" opacity="0.10"/>
+<rect class="ring" x="92" y="92" width="840" height="840" rx="178" fill="none" stroke="#EFA00E" stroke-width="16"/>
+<path d="M 336.0 340.0 L 688.0 340.0 Q 714.0 340.0 718.5 365.6 L 773.5 678.4 Q 778.0 704.0 752.0 704.0 L 272.0 704.0 Q 246.0 704.0 250.5 678.4 L 305.5 365.6 Q 310.0 340.0 336.0 340.0 Z" fill="#120B03" stroke="#EFA00E" stroke-width="12" stroke-linejoin="round"/>
+<rect x="454" y="360" width="116" height="14" rx="7" fill="#EFA00E" opacity="0.9"/>
+<rect class="k c1" x="329.8" y="392.0" width="81.4" height="58.0" rx="12" fill="#F2A30C" fill-opacity="0.85" stroke="#EFA00E" stroke-width="5"/>
+<rect class="k c3" x="424.1" y="392.0" width="81.4" height="58.0" rx="12" fill="#F2A30C" fill-opacity="0.85" stroke="#EFA00E" stroke-width="5"/>
+<rect class="k c5" x="518.5" y="392.0" width="81.4" height="58.0" rx="12" fill="#F2A30C" fill-opacity="0.85" stroke="#EFA00E" stroke-width="5"/>
+<rect class="k c7" x="612.9" y="392.0" width="81.4" height="58.0" rx="12" fill="#F2A30C" fill-opacity="0.85" stroke="#EFA00E" stroke-width="5"/>
+<rect class="k c0" x="317.5" y="462.0" width="67.4" height="58.0" rx="12" fill="#F2A30C" fill-opacity="0.85" stroke="#EFA00E" stroke-width="5"/>
+<rect class="k c2" x="397.9" y="462.0" width="67.4" height="58.0" rx="12" fill="#F2A30C" fill-opacity="0.85" stroke="#EFA00E" stroke-width="5"/>
+<rect class="k c4" x="478.3" y="462.0" width="67.4" height="58.0" rx="12" fill="#F2A30C" fill-opacity="0.85" stroke="#EFA00E" stroke-width="5"/>
+<rect class="k c6" x="558.7" y="462.0" width="67.4" height="58.0" rx="12" fill="#F2A30C" fill-opacity="0.85" stroke="#EFA00E" stroke-width="5"/>
+<rect class="k c8" x="639.1" y="462.0" width="67.4" height="58.0" rx="12" fill="#F2A30C" fill-opacity="0.85" stroke="#EFA00E" stroke-width="5"/>
+<rect class="k c0" x="305.1" y="532.0" width="72.3" height="58.0" rx="12" fill="#F2A30C" fill-opacity="0.85" stroke="#EFA00E" stroke-width="5"/>
+<rect class="k c2" x="390.5" y="532.0" width="72.3" height="58.0" rx="12" fill="#F2A30C" fill-opacity="0.85" stroke="#EFA00E" stroke-width="5"/>
+<rect class="k c4" x="475.8" y="532.0" width="72.3" height="58.0" rx="12" fill="#F2A30C" fill-opacity="0.85" stroke="#EFA00E" stroke-width="5"/>
+<rect class="k c6" x="561.2" y="532.0" width="72.3" height="58.0" rx="12" fill="#F2A30C" fill-opacity="0.85" stroke="#EFA00E" stroke-width="5"/>
+<rect class="k c8" x="646.5" y="532.0" width="72.3" height="58.0" rx="12" fill="#F2A30C" fill-opacity="0.85" stroke="#EFA00E" stroke-width="5"/>
+<rect class="k c0" x="292.3" y="602.0" width="88.6" height="64.0" rx="12" fill="#F2A30C" fill-opacity="0.85" stroke="#EFA00E" stroke-width="5"/>
+<rect class="k c3" x="393.9" y="602.0" width="151.0" height="64.0" rx="12" fill="#F2A30C" fill-opacity="0.85" stroke="#EFA00E" stroke-width="5"/>
+<rect class="k c6" x="557.9" y="602.0" width="62.4" height="64.0" rx="12" fill="#F2A30C" fill-opacity="0.85" stroke="#EFA00E" stroke-width="5"/>
+<rect class="k c8" x="633.2" y="602.0" width="98.5" height="64.0" rx="12" fill="#F2A30C" fill-opacity="0.85" stroke="#EFA00E" stroke-width="5"/>
+</svg>

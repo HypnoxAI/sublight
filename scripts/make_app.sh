@@ -29,30 +29,24 @@ cp "${BIN}" "${APP}/Contents/MacOS/Sublight"
 cp scripts/Info.plist "${APP}/Contents/Info.plist"
 
 echo "==> icons"
-# The .icns and the menu-bar template PDF are GENERATED artifacts — they are
-# not checked in, so a fresh clone or a re-extracted archive won't have them
-# and the app would silently fall back to an SF Symbol. Generate them here
-# instead of relying on the human remembering a separate command.
-if [ ! -f assets/icons/Sublight.icns ] || [ ! -f assets/icons/sublight-menubar-Template.png ]; then
-  if command -v rsvg-convert >/dev/null 2>&1; then
-    echo "    generating icon assets…"
-    bash assets/icons/make_icons.sh || echo "    (icon generation failed — continuing with SF Symbol fallback)"
-  else
-    echo "    rsvg-convert not found — install with:  brew install librsvg"
-    echo "    (continuing; the app will use an SF Symbol fallback)"
-  fi
+# The .icns is a GENERATED artifact built from the committed 1024px PNG master
+# with tools every Mac ships (sips + iconutil) — no librsvg needed. It lands
+# under build/ (gitignored) and is only regenerated when the master changes.
+ICON_SRC="assets/icons/sublight-icon-1024.png"
+ICON_SET="build/Sublight.iconset"
+ICON_OUT="build/Sublight.icns"
+if [ ! -f "$ICON_OUT" ] || [ "$ICON_SRC" -nt "$ICON_OUT" ]; then
+  rm -rf "$ICON_SET"
+  mkdir -p "$ICON_SET"
+  for SZ in 16 32 128 256 512; do
+    DB=$((SZ * 2))
+    sips -z $SZ $SZ "$ICON_SRC" --out "$ICON_SET/icon_${SZ}x${SZ}.png" > /dev/null
+    sips -z $DB $DB "$ICON_SRC" --out "$ICON_SET/icon_${SZ}x${SZ}@2x.png" > /dev/null
+  done
+  iconutil -c icns "$ICON_SET" -o "$ICON_OUT"
 fi
-
-if [ -f assets/icons/Sublight.icns ]; then
-  cp assets/icons/Sublight.icns "${APP}/Contents/Resources/Sublight.icns"
-else
-  echo "    (no Sublight.icns — run assets/icons/make_icons.sh to generate)"
-fi
-if [ -f assets/icons/sublight-menubar-Template.png ]; then
-  cp assets/icons/sublight-menubar-Template.png "${APP}/Contents/Resources/"
-else
-  echo "    (no menu-bar template — app will fall back to an SF Symbol)"
-fi
+mkdir -p "${APP}/Contents/Resources"
+cp "$ICON_OUT" "${APP}/Contents/Resources/Sublight.icns"
 
 echo "==> ad-hoc codesign"
 /usr/bin/codesign --force --sign - "${APP}"
