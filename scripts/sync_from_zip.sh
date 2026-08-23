@@ -4,12 +4,8 @@
 # this repo for review. Nothing is committed; review the diff first.
 #
 # Exclusions: .git, .build, and build are local state that must survive the
-# sync. The icon binaries (Sublight.icns, Sublight.iconset,
-# sublight-menubar-Template.png, sublight-menubar-preview.png) are generated
-# locally by assets/icons/make_icons.sh and absent from upstream zips.
-# sublight-hero.png is the same story with higher stakes: generated locally,
-# committed because the README embeds it, and absent from upstream zips — so
-# without the exclusion, rsync --delete would remove it and break the README.
+# sync (build/ also holds the generated Sublight.icns and iconset, which
+# make_app.sh regenerates from the committed PNG master).
 #
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -26,11 +22,6 @@ rsync -a --delete \
     --exclude '.git' \
     --exclude '.build' \
     --exclude 'build' \
-    --exclude 'assets/icons/Sublight.icns' \
-    --exclude 'assets/icons/Sublight.iconset' \
-    --exclude 'assets/icons/sublight-menubar-Template.png' \
-    --exclude 'assets/icons/sublight-menubar-preview.png' \
-    --exclude 'assets/icons/sublight-hero.png' \
     "${SRC}" .
 
 echo

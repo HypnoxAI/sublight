@@ -285,7 +285,9 @@ sublight/
 │       ├── CalibrationView.swift            calibration sheet
 │       ├── OnboardingView.swift             first-run window
 │       └── HotKeyChoice.swift               preset shortcut table
-├── assets/icons/                            SVG masters + generator
+├── assets/icons/                            brand masters: SVG + 1024px PNG (on/off), animated README logo;
+│                                            .icns is built at bundle time by make_app.sh (sips + iconutil → build/,
+│                                            gitignored); menu bar glyph is code-drawn in StatusGlyph.swift
 ├── scripts/  (Info.plist, make_app.sh)      bundle + ad-hoc sign
 └── docs/  (SPEC, ROADMAP, APPSTORE_AND_HEALTH)
 ```

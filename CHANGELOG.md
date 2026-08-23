@@ -30,12 +30,17 @@ stability on.
   it is now `com.hypnox.sublight`.
 
 ### Changed
-- **App icon restyled** to the amber edition: lit amber keys above the wave,
-  dimmed keys below — the dither drawn as an actual backlight. The wave itself
-  is now a true sine (crest, trough, crest, amplitudes in golden-ratio
-  proportion) rather than three same-direction humps, which read as a cloud
-  outline. Menu-bar glyph carries the same sine as its knocked-out channel and
-  remains a monochrome template image, as macOS requires.
+- **v1 brand mark on every surface.** The app icon (Finder, Get Info,
+  Spotlight) is now the amber-ringed keyboard tile with hollow/filled keys;
+  the README carries the animated logo (2.8 s cycle, ~0.36 Hz — far below the
+  photosensitivity band) and an off/on pair. The **menu bar glyph is drawn in
+  code** (`StatusGlyph.swift`) and reflects state: keys hollow while idle,
+  filling from the right as dimming engages, with the fill level mapped to
+  the frequency bucket (0 / 0.3 / 0.5 / 0.8 for off / ≈3 Hz / ≈6 Hz / ≈9 Hz).
+  Still a monochrome template image, as macOS requires.
+- **librsvg icon pipeline retired.** `make_icons.sh` and the old SVG sources
+  are gone; `make_app.sh` builds the `.icns` from the committed 1024px PNG
+  master at bundle time with `sips` + `iconutil`, which ship with macOS.
 - **Calibration's floor step now asks "does it flicker?" instead of "was that
   brighter?"** The two levels alternate at ~1 Hz rather than being shown once
   each. The original phrasing required remembering a brightness across a
