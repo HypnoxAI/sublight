@@ -75,7 +75,18 @@ public enum EngineState: Equatable, Sendable {
     }
 }
 
-public final class DitherEngine {
+/// `@unchecked Sendable`, and this is the load-bearing declaration of the
+/// engine's central invariant rather than a way around the checker.
+///
+/// EVERY stored property below is confined to `EngineQueue`. The public API is
+/// a set of thin wrappers that hop onto that queue and mutate nothing
+/// themselves; the timer handlers already run on it; and the bridge underneath
+/// hops onto the same queue, so the daemon only ever sees one caller at a time.
+/// That confinement is what makes this type safe to hand between the app's main
+/// actor and the queue, and it is checked at run time where it actually
+/// matters — see the `dispatchPrecondition` at the bridge's dynamic-dispatch
+/// site, through which every CoreBrightness call passes.
+public final class DitherEngine: @unchecked Sendable {
 
     /// THE STABILITY CEILING. Above this the daemon stops honouring the
     /// dither and the keys fall into multi-second dark envelopes.

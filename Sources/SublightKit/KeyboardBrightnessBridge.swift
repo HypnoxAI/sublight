@@ -88,11 +88,14 @@ import os
     // Change-notification API (yield-to-manual spike). The block's true argument
     // signature is unknown, so we register a ZERO-ARG block: safe because any
     // extra args the system passes sit in registers the block never reads.
-    func registerNotificationForKeys(_ keys: Any?, keyboardID: UInt64, block: @escaping () -> Void)
+    func registerNotificationForKeys(_ keys: Any?, keyboardID: UInt64, block: @escaping @Sendable () -> Void)
     func unregisterKeyboardNotificationBlock()
 }
 
-public final class KeyboardBrightnessBridge {
+/// `@unchecked Sendable`: every method body executes inside `EngineQueue.run`,
+/// so the one piece of mutable state (`_writePadding`) and the CoreBrightness
+/// client itself are only ever touched on that queue. See design rule 4 above.
+public final class KeyboardBrightnessBridge: @unchecked Sendable {
 
     public enum BridgeError: Error, CustomStringConvertible {
         case frameworkNotLoadable
@@ -491,7 +494,8 @@ public final class KeyboardBrightnessBridge {
     /// despite the unknown real block signature: a () -> Void block ignores any
     /// args the system passes (they occupy registers the block never reads).
     @discardableResult
-    public func registerChangeNotification(keys: Any?, _ keyboardID: UInt64, _ block: @escaping () -> Void) -> Bool {
+    public func registerChangeNotification(keys: Any?, _ keyboardID: UInt64,
+                                           _ block: @escaping @Sendable () -> Void) -> Bool {
         EngineQueue.run {
             guard responds("registerNotificationForKeys:keyboardID:block:") else { return false }
             dyn.registerNotificationForKeys?(keys, keyboardID: keyboardID, block: block)

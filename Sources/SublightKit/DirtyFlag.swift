@@ -111,7 +111,7 @@ public struct DirtyFlag {
             // conservative and assume it IS an owner, so we don't stomp it.
             return true
         }
-        let path = String(cString: buf).lowercased()
+        let path = String(decoding: buf.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self).lowercased()
         return path.contains("sublight")
     }
 

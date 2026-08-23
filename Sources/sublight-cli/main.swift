@@ -205,7 +205,10 @@ func optionalSampleHz(_ args: [String]) -> Double?? {
 /// run is not identical to an unsampled one. That is exactly why the err-dark
 /// and coalescing counters are read for the sampled run too — if the polling
 /// perturbed the schedule, they will say so.
-final class ReadbackSampler {
+/// `@unchecked Sendable`: `rows` is only ever appended to from the timer
+/// handler, which runs on EngineQueue, and only read after `finish()` has
+/// cancelled that timer and drained the queue.
+final class ReadbackSampler: @unchecked Sendable {
     struct Row {
         let atNanos: UInt64
         let brightness: Float?
@@ -521,7 +524,9 @@ func runSlow(_ c: BacklightController, freq: Double, duty: Double, seconds: Doub
 
 /// Thread-safe fire counter for the notification probe. The change-notification
 /// block runs on a system thread; increments must be locked.
-final class ProbeCounter {
+/// `@unchecked Sendable`: the notification block fires on a system thread, so
+/// every access to `n` is taken under `lock`.
+final class ProbeCounter: @unchecked Sendable {
     private var n = 0
     private let lock = NSLock()
     func bump() { lock.lock(); n += 1; lock.unlock() }

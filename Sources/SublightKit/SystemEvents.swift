@@ -23,9 +23,15 @@
 
 import AppKit
 
-public final class SleepWakeObserver {
+/// `@unchecked Sendable`: every stored property is touched only on the main
+/// queue. The observers are registered with `queue: .main`, the settle-delayed
+/// resume is scheduled with `DispatchQueue.main.asyncAfter`, and `deinit` runs
+/// wherever the last reference is dropped — which is why this is not simply
+/// `@MainActor`: a main-actor class cannot have a `deinit` that touches its own
+/// isolated state, and this one must cancel a pending work item there.
+public final class SleepWakeObserver: @unchecked Sendable {
 
-    public enum Transition: String {
+    public enum Transition: String, Sendable {
         case willSleep, screensDidSleep, sessionDidResignActive
         case didWake, screensDidWake, sessionDidBecomeActive
 
@@ -49,8 +55,8 @@ public final class SleepWakeObserver {
     /// `wakeSettleDelay`.
     public init(
         wakeSettleDelay: TimeInterval = 1.5,
-        onSuspend: @escaping (Transition) -> Void,
-        onResume: @escaping (Transition) -> Void
+        onSuspend: @escaping @Sendable (Transition) -> Void,
+        onResume: @escaping @Sendable (Transition) -> Void
     ) {
         self.wakeSettleDelay = wakeSettleDelay
         let center = NSWorkspace.shared.notificationCenter

@@ -21,7 +21,12 @@
 
 import Foundation
 
-public final class BacklightController {
+/// `@unchecked Sendable`: it owns nothing mutable of its own beyond two
+/// configuration values, and every call it makes goes through the
+/// queue-confined bridge or the engine (both of which state the same
+/// invariant). It is handed between the app's main actor and the engine queue
+/// for exactly that reason.
+public final class BacklightController: @unchecked Sendable {
 
     public let bridge: KeyboardBrightnessBridge
     public let keyboardID: UInt64

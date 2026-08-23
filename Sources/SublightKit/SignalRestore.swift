@@ -15,7 +15,10 @@
 
 import Foundation
 
-public final class SignalRestore {
+/// `@unchecked Sendable`: `sources` is written once in `init` and only read
+/// thereafter (in `deinit`), and the dispatch sources it holds are themselves
+/// thread-safe.
+public final class SignalRestore: @unchecked Sendable {
 
     public static let defaultSignals: [Int32] = [SIGTERM, SIGINT, SIGHUP]
 
@@ -25,7 +28,7 @@ public final class SignalRestore {
     /// lifetime — dropping it cancels the sources.
     public init(signals: [Int32] = SignalRestore.defaultSignals,
                 queue: DispatchQueue = EngineQueue.queue,
-                restore: @escaping () -> Void) {
+                restore: @escaping @Sendable () -> Void) {
         for sig in signals {
             signal(sig, SIG_IGN)
             let src = DispatchSource.makeSignalSource(signal: sig, queue: queue)
