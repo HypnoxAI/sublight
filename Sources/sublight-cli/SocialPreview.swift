@@ -18,6 +18,9 @@
 import AppKit
 import Foundation
 
+/// `@MainActor` for the same reason as GlyphLegend: AppKit drawing invoked from
+/// main-actor top-level code.
+@MainActor
 enum SocialPreview {
 
     static let fileName = "social-preview.png"

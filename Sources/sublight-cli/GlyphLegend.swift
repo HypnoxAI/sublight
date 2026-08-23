@@ -26,6 +26,10 @@ import AppKit
 import Foundation
 import SublightKit
 
+/// `@MainActor` to match StatusGlyph, which it draws from. This is dev tooling
+/// invoked from top-level code, which is already main-actor isolated, so the
+/// annotation costs nothing and states where it runs.
+@MainActor
 enum GlyphLegend {
 
     struct State {

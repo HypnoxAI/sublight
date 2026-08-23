@@ -10,6 +10,26 @@ stability on.
 
 ## [Unreleased]
 
+### Changed
+- **Builds in Swift 6 language mode with complete concurrency checking**, on
+  every target. No behaviour changed; the compiler now refuses several things
+  that were previously only conventions. `StatusGlyph` is `@MainActor` (it
+  vends NSImages for a status item and memoized them in shared mutable state);
+  the Carbon hotkey table moved behind a lock, because the two things that
+  touch it — `deinit` and a C function pointer — are the two things that can
+  never carry actor isolation; and the engine's state mirror now reads its
+  callback on the engine queue and sends only that, rather than handing
+  `self` to the main queue.
+
+  Strict checking does **not** cover the engine's queue confinement:
+  `queue.async { self.something() }` compiles regardless, and the only way to
+  make the compiler prove it would be a custom global actor, which would make
+  every bridge call `async` and change the engine's timing. So the invariant
+  stays held by construction and is now also checked at run time — a
+  `dispatchPrecondition` at the single point where CoreBrightness is actually
+  reached, which traps loudly if any future edit calls the daemon from off the
+  queue.
+
 ### Planned
 
 - Developer ID signing, notarization, and a DMG.

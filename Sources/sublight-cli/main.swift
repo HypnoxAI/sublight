@@ -135,6 +135,7 @@ func flagValue(_ args: [String], _ flag: String) -> String? {
 /// engaged the engine or disabled auto-brightness with direct writes (hold,
 /// pulse, probe, dither-test, notify-probe). Quick commands skip this so a
 /// Ctrl-C during e.g. `set` does not turn auto-brightness on behind the user.
+@MainActor
 func installRestoreOnSignal(_ c: BacklightController, level: Float = 0.3) {
     signalRestore = SignalRestore { [weak c] in
         c?.panicRestore(to: level)
@@ -285,6 +286,7 @@ var signalRestore: SignalRestore?
 /// unverified API surface.
 var apiVerified = false
 
+@MainActor
 func makeController(args: [String]) -> BacklightController? {
     do {
         guard let period = optionalPeriod(args) else {

@@ -41,11 +41,56 @@ public final class HotKeyManager {
         public static let d: UInt32 = 0x02
     }
 
-    // The Carbon event handler is a bare C function pointer and cannot capture
-    // context, so registered actions live in a static table keyed by hotkey id.
-    private static var actions: [UInt32: () -> Void] = [:]
-    private static var nextID: UInt32 = 1
-    private static var sharedHandler: EventHandlerRef?
+    /// The Carbon event handler is a bare C function pointer and cannot capture
+    /// context, so registered actions must live in a table keyed by hotkey id —
+    /// global mutable state, which Swift 6 rightly refuses to accept unguarded.
+    ///
+    /// Guarded by a lock rather than isolated to an actor, because the two
+    /// things that touch it *cannot* carry isolation: `unregister()` is called
+    /// from `deinit`, which can never be actor-isolated, and the event handler
+    /// is a C function pointer. A lock is the one mechanism both can use.
+    ///
+    /// `@unchecked Sendable` is therefore justified in the strict sense: every
+    /// stored property is private and every access below is inside `lock`.
+    private final class Registry: @unchecked Sendable {
+        private let lock = NSLock()
+        private var actions: [UInt32: @Sendable () -> Void] = [:]
+        private var nextID: UInt32 = 1
+        private var handler: EventHandlerRef?
+
+        func add(_ action: @escaping @Sendable () -> Void) -> UInt32 {
+            lock.lock(); defer { lock.unlock() }
+            let id = nextID
+            nextID += 1
+            actions[id] = action
+            return id
+        }
+
+        func remove(_ id: UInt32) {
+            lock.lock(); defer { lock.unlock() }
+            actions.removeValue(forKey: id)
+        }
+
+        func action(for id: UInt32) -> (@Sendable () -> Void)? {
+            lock.lock(); defer { lock.unlock() }
+            return actions[id]
+        }
+
+        /// True if this call installed the handler (so the caller should do the
+        /// Carbon work); false if one was already installed.
+        func claimHandlerInstall() -> Bool {
+            lock.lock(); defer { lock.unlock() }
+            guard handler == nil else { return false }
+            return true
+        }
+
+        func storeHandler(_ ref: EventHandlerRef?) {
+            lock.lock(); defer { lock.unlock() }
+            handler = ref
+        }
+    }
+
+    private static let registry = Registry()
 
     private var hotKeyRef: EventHotKeyRef?
     private var id: UInt32?
@@ -58,20 +103,19 @@ public final class HotKeyManager {
     /// previously held. Returns false if the combination is already taken by
     /// another app — the caller should surface that rather than fail silently.
     @discardableResult
-    public func register(keyCode: UInt32, modifiers: UInt32, action: @escaping () -> Void) -> Bool {
+    public func register(keyCode: UInt32, modifiers: UInt32,
+                         action: @escaping @Sendable () -> Void) -> Bool {
         unregister()
         Self.installSharedHandlerIfNeeded()
 
-        let newID = Self.nextID
-        Self.nextID += 1
-        Self.actions[newID] = action
+        let newID = Self.registry.add(action)
 
         let hotKeyID = EventHotKeyID(signature: OSType(0x5355424C), id: newID) // 'SUBL'
         var ref: EventHotKeyRef?
         let status = RegisterEventHotKey(keyCode, modifiers, hotKeyID,
                                          GetApplicationEventTarget(), 0, &ref)
         guard status == noErr, let ref else {
-            Self.actions.removeValue(forKey: newID)
+            Self.registry.remove(newID)
             Log.lifecycle.error("hotkey registration failed (status \(status, privacy: .public)) — likely already claimed by another app")
             return false
         }
@@ -87,15 +131,16 @@ public final class HotKeyManager {
             hotKeyRef = nil
         }
         if let id {
-            Self.actions.removeValue(forKey: id)
+            Self.registry.remove(id)
             self.id = nil
         }
     }
 
     private static func installSharedHandlerIfNeeded() {
-        guard sharedHandler == nil else { return }
+        guard registry.claimHandlerInstall() else { return }
         var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard),
                                  eventKind: UInt32(kEventHotKeyPressed))
+        var installed: EventHandlerRef?
         InstallEventHandler(GetApplicationEventTarget(), { _, event, _ -> OSStatus in
             guard let event else { return OSStatus(eventNotHandledErr) }
             var hkID = EventHotKeyID()
@@ -106,11 +151,12 @@ public final class HotKeyManager {
                                            MemoryLayout<EventHotKeyID>.size,
                                            nil,
                                            &hkID)
-            guard status == noErr, let action = HotKeyManager.actions[hkID.id] else {
+            guard status == noErr, let action = HotKeyManager.registry.action(for: hkID.id) else {
                 return OSStatus(eventNotHandledErr)
             }
             DispatchQueue.main.async { action() }
             return noErr
-        }, 1, &spec, nil, &sharedHandler)
+        }, 1, &spec, nil, &installed)
+        registry.storeHandler(installed)
     }
 }

@@ -19,6 +19,17 @@
 //  mirrors engine state with `DispatchQueue.main.async` only — which is what
 //  makes `EngineQueue.run { … }` from the main thread deadlock-free.
 //
+//  UNDER SWIFT 6. The package builds in Swift 6 language mode with complete
+//  concurrency checking, which catches global mutable state and non-Sendable
+//  values crossing isolation boundaries. It does NOT check this confinement:
+//  `queue.async { self.something() }` compiles regardless, so the invariant
+//  "no CoreBrightness call ever runs off this queue" is not something the
+//  compiler can be made to prove without a custom global actor — which would
+//  make every bridge call async and change the engine's behaviour. The
+//  invariant is therefore held by construction (`run` is the only entry point,
+//  and it either runs inline on this queue or hops onto it) and checked at run
+//  time by a `dispatchPrecondition` at the bridge's dynamic-dispatch site.
+//
 //  Licensed under the Apache License 2.0 — see LICENSE.
 //
 

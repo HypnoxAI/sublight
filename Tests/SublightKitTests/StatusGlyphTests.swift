@@ -13,6 +13,8 @@ import XCTest
 import AppKit
 @testable import SublightKit
 
+/// `@MainActor` because StatusGlyph is — it vends NSImages for a status item.
+@MainActor
 final class StatusGlyphTests: XCTestCase {
 
     func testTheDeckHasTenKeys() {

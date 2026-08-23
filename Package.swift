@@ -1,4 +1,4 @@
-// swift-tools-version:5.9
+// swift-tools-version:6.0
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Hypnox Technologies LLC
 // Sublight — sub-minimum keyboard backlight control for Apple Silicon MacBooks.
@@ -27,17 +27,20 @@ let package = Package(
     targets: [
         .target(
             name: "SublightKit",
-            path: "Sources/SublightKit"
+            path: "Sources/SublightKit",
+            swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .executableTarget(
             name: "sublight-cli",
             dependencies: ["SublightKit"],
-            path: "Sources/sublight-cli"
+            path: "Sources/sublight-cli",
+            swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         .executableTarget(
             name: "SublightApp",
             dependencies: ["SublightKit"],
-            path: "Sources/SublightApp"
+            path: "Sources/SublightApp",
+            swiftSettings: [.swiftLanguageMode(.v6)]
         ),
         // Covers only the pure, deterministic logic — the private-API surface
         // can't be unit tested, it has to be verified by eye on real hardware
@@ -45,7 +48,8 @@ let package = Package(
         .testTarget(
             name: "SublightKitTests",
             dependencies: ["SublightKit"],
-            path: "Tests/SublightKitTests"
+            path: "Tests/SublightKitTests",
+            swiftSettings: [.swiftLanguageMode(.v6)]
         ),
     ]
 )

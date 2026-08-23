@@ -183,7 +183,24 @@ public final class KeyboardBrightnessBridge {
         client.responds(to: NSSelectorFromString(selectorName))
     }
 
-    private var dyn: AnyObject { client as AnyObject }
+    /// EVERY call into CoreBrightness goes through this property, which makes
+    /// it the one place the confinement can be checked.
+    ///
+    /// Why a runtime precondition and not the type system: Swift 6 cannot
+    /// express "this must not run on the main actor". The only way to make the
+    /// compiler enforce it is a custom global actor over the engine queue,
+    /// which would make every call `async` — a behaviour change, and a large
+    /// one, since the dither's edge handlers depend on calling synchronously
+    /// from the queue they are already on. Strict concurrency does catch the
+    /// things it can (global mutable state, sending non-Sendable values across
+    /// isolation), and this covers the part it cannot: if any future edit
+    /// reaches the daemon from outside `EngineQueue`, this traps immediately
+    /// and loudly rather than producing an intermittent, unattributable
+    /// backlight fault months later.
+    private var dyn: AnyObject {
+        dispatchPrecondition(condition: .onQueue(EngineQueue.queue))
+        return client as AnyObject
+    }
 
     // MARK: - Command truth
 

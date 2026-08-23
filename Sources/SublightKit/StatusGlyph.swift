@@ -23,6 +23,12 @@ import AppKit
 /// Geometry is defined in points on an 18x18 canvas (the standard status item
 /// size); AppKit renders it at the display's native scale, so it stays crisp
 /// on Retina.
+///
+/// `@MainActor` because it is a UI type: it vends NSImages for a status item
+/// and memoizes them in shared mutable state. Isolating the whole thing is
+/// simpler and more honest than locking the cache — every caller is already on
+/// the main actor (the MenuBarExtra label, and the CLI's top-level code).
+@MainActor
 public enum StatusGlyph {
 
     /// One NSImage per discrete fill level. The MenuBarExtra label is

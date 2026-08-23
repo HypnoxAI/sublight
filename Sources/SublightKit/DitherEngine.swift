@@ -65,7 +65,7 @@
 import Foundation
 import os
 
-public enum EngineState: Equatable {
+public enum EngineState: Equatable, Sendable {
     case stopped
     case running(frequencyHz: Double, duty: Double)
 
@@ -156,7 +156,10 @@ public final class DitherEngine {
 
     /// Mirror of the engine state for the UI. Always invoked asynchronously
     /// on the main queue; the engine queue never calls out synchronously.
-    public var onStateChange: ((EngineState) -> Void)?
+    ///
+    /// `@Sendable` because it is handed from whatever set it (the app's main
+    /// actor) to the engine queue and invoked from there.
+    public var onStateChange: (@Sendable (EngineState) -> Void)?
 
     // MARK: Init
 
@@ -653,8 +656,11 @@ public final class DitherEngine {
     private func setState(_ s: EngineState) {
         guard s != _state else { return }
         _state = s
-        DispatchQueue.main.async { [weak self] in
-            self?.onStateChange?(s)
-        }
+        // Read the callback HERE, on the engine queue, and send only it — not
+        // `self`. Capturing `self` would hand a queue-confined object to the
+        // main queue, which is exactly the race the confinement exists to
+        // prevent, and which Swift 6 refuses to compile.
+        let notify = onStateChange
+        DispatchQueue.main.async { notify?(s) }
     }
 }

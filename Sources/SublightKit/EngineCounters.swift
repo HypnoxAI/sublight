@@ -159,6 +159,10 @@ public struct EngineCounters: Equatable, Codable {
 /// Both feeders already run on EngineQueue, so the lock is only there to make
 /// a read from any thread — `sublight-cli status`, the app's UI — safe without
 /// a queue hop.
+///
+/// `@unchecked Sendable` is justified in the strict sense: every stored
+/// property below is private, and every read and write of one happens inside
+/// `lock`. Nothing escapes; the snapshot handed out is a value type.
 public final class EngineDiagnostics: @unchecked Sendable {
 
     public static let shared = EngineDiagnostics()
