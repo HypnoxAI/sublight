@@ -1031,7 +1031,7 @@ case "pair-sweep":
     if DiagnosticsStore.save(DiagnosticsRecord(label: sweepLabel, counters: snap)) {
         print("saved: \(DiagnosticsStore.defaultURL.path)")
     }
-    c.panicRestore(to: 0.3)
+    c.restoreOnExit(to: 0.3)
     print("\nrestored: auto-brightness on, level 0.30")
     exit(0)
 

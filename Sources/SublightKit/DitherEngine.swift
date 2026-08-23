@@ -259,6 +259,29 @@ public final class DitherEngine {
         EngineQueue.run { restoreLocked(force: force) }
     }
 
+    /// EXIT-TIME restore, for terminate and signal handlers.
+    ///
+    /// Unlike `panicRestore`/`restoreNow(force:)` this is a NO-OP when the
+    /// process has never mutated the backlight. Forcing unconditionally was
+    /// wrong in a way that only shows up in the quiet case: launching the app,
+    /// never turning dimming on, and quitting would still command
+    /// auto-brightness ON and a level of 0.4, overwriting whatever the user
+    /// had set by hand. `force` is still right once we HAVE touched the
+    /// hardware — calibration suppresses the ALS with direct bridge writes
+    /// that never engage the engine, so `engaged` alone would leave it off —
+    /// which is exactly what `hardwareTouched` captures and `engaged` does not.
+    @discardableResult
+    public func restoreOnExit(level: Float? = nil) -> Bool {
+        EngineQueue.run {
+            if let level { _restoreLevel = min(max(level, 0), 1) }
+            guard diag.hardwareTouched else {
+                Log.lifecycle.info("exit: backlight was never commanded this session — leaving system state untouched")
+                return true
+            }
+            return restoreLocked(force: true)
+        }
+    }
+
     /// Arm crash recovery for an EXTERNAL suppression the engine itself is not
     /// driving — calibration disables auto-brightness with direct bridge writes
     /// that never engage the engine, so without this a hard crash mid-calibration
@@ -274,7 +297,8 @@ public final class DitherEngine {
     public func recoverFromCrashIfNeeded() -> DirtyFlag.Recovery {
         EngineQueue.run {
             dirtyFlag.recoverIfNeeded {
-                commander.restoreSystemControl(level: _restoreLevel)
+                diag.noteHardwareTouched()
+                return commander.restoreSystemControl(level: _restoreLevel)
             }
         }
     }
@@ -320,6 +344,7 @@ public final class DitherEngine {
         engaged = true
         beginActivity()
 
+        diag.noteHardwareTouched()
         let flips = commander.assertSuppression()
         if flips.any {
             Log.engine.notice("start: suppression flags were off — autoBrightnessOn=\(String(describing: flips.autoBrightnessWasOn), privacy: .public) idleDimActive=\(String(describing: flips.idleDimWasActive), privacy: .public); asserted")
@@ -392,6 +417,7 @@ public final class DitherEngine {
         // engagement is tracked by `engaged`; explicit restores pass `force`.
         if engaged || force {
             let level = _restoreLevel
+            diag.noteHardwareTouched()
             if commander.restoreSystemControl(level: level) {
                 engaged = false
                 dirtyFlag.clear()
@@ -493,6 +519,7 @@ public final class DitherEngine {
             """)
         Self.signposter.emitEvent("ON")
         diag.noteHighExecuted(atNanos: issuedAt)
+        diag.noteHardwareTouched()
         commander.setBrightness(_highLevel)
     }
 
@@ -524,6 +551,7 @@ public final class DitherEngine {
             """)
         Self.signposter.emitEvent("OFF")
         diag.noteLowExecuted()
+        diag.noteHardwareTouched()
         commander.setBrightness(0)
     }
 
@@ -590,6 +618,7 @@ public final class DitherEngine {
 
     private func keeperFired() {
         guard schedule != nil else { return }
+        diag.noteHardwareTouched()
         let flips = commander.assertSuppression()
         if flips.any {
             Log.engine.warning("keeper: suppression flag flipped mid-run — autoBrightnessOn=\(String(describing: flips.autoBrightnessWasOn), privacy: .public) idleDimActive=\(String(describing: flips.idleDimWasActive), privacy: .public); re-asserted")

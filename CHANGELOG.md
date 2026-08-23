@@ -10,6 +10,44 @@ stability on.
 
 ## [Unreleased]
 
+### Fixed
+- **High mode's long-standing irregularity was never the engine — it was a
+  daemon-side cycle-period limit, and the presets sat on the wrong side of
+  it.** Above roughly 8.5 Hz the backlight daemon stops honouring the dither
+  and the keys fall completely dark for a second or more at a time, repeating
+  every one to three seconds. This is not command coalescing (the old
+  explanation) and not flicker fusion: it is a hard limit on how short a
+  dither cycle the daemon will act on — 117.6 ms fails, 125.0 ms holds. Duty
+  makes no difference, the ON window makes no difference, and neither
+  read-back API can see it. The old re-armed-after-each-XPC engine drifted
+  slower than requested and so spent much of its time *below* the limit,
+  which is why this read as intermittent "jitter" for so long; the anchored
+  rewrite hits the requested period exactly and put High mode squarely on the
+  wrong side of it every time.
+- **The engine is exonerated, with numbers.** Command-truth instrumentation
+  put 9,270 dither edges through scheduled/fired/executed/skipped counters
+  across fifteen runs: 9,265 executed, 5 benign isolated skips, zero timer
+  coalescing, zero rejected commands, and daemon round trips with a p50 of
+  0.15 ms. The dark envelopes happened while commands were arriving on
+  schedule and being accepted.
+- **Presets re-homed to 3 / 6 / 8 Hz behind an enforced 8.0 Hz ceiling.** High
+  was 9 Hz — above the boundary. It is now defined AS
+  `DitherEngine.maxStableFrequencyHz`, which is the lowest frequency ever
+  observed to fail (8.5 Hz) less a 0.5 Hz margin, verified by a five-minute
+  soak at 8.0 Hz with 2,401 of 2,401 edges executed and no envelope. The
+  engine clamps any higher request and logs the clamp; the Advanced slider,
+  Simple mode, the schedule, `pulse high`, and calibration's search ladder all
+  stop at the ceiling, and a stored calibration above it is clamped down on
+  load. `sublight-cli --allow-unstable` lifts it for re-measurement; the app
+  has no path past it. Measured on Mac16,12 / macOS 26.6.1 — re-qualify after
+  a macOS update with the soak ritual in `README.md`.
+- **Quitting without ever dimming no longer touches your backlight.** The exit
+  restore forced auto-brightness on and a level of 0.4 unconditionally, so
+  simply launching Sublight and quitting overwrote whatever you had set by
+  hand. It is now gated on whether the process ever issued a backlight
+  command; once it has, the forced restore behaves exactly as before, so
+  calibration's ambient-sensor suppression is still always undone.
+
 ### Added
 - **Write padding** (`hold --pad-writes [--pad-offset f]`), a diagnostic that
   sends every edge command twice — first the value offset by ~0.002, then the

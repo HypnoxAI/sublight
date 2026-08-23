@@ -382,3 +382,86 @@ final class FrequencyCeilingTests: XCTestCase {
                        "the override lifts the ceiling, it does not remove all bounds")
     }
 }
+
+/// The exit gate: a process that never commanded the backlight must leave the
+/// user's state alone when it quits.
+final class HardwareTouchedTests: XCTestCase {
+
+    private var tempDir: URL!
+    private var recorder: RecordingCommander!
+    private var diag: EngineDiagnostics!
+    private var engine: DitherEngine!
+
+    override func setUp() {
+        super.setUp()
+        tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sublight-touched-\(UUID().uuidString)")
+        recorder = RecordingCommander()
+        diag = EngineDiagnostics()
+        engine = DitherEngine(commander: recorder, highLevel: 0.0625,
+                              dirtyFlag: DirtyFlag(directory: tempDir,
+                                                   defaults: UserDefaults(suiteName: "sublight.touched.\(UUID().uuidString)")!),
+                              diagnostics: diag)
+        engine.allowsUnstableFrequency = true
+    }
+
+    override func tearDown() {
+        engine = nil
+        try? FileManager.default.removeItem(at: tempDir)
+        super.tearDown()
+    }
+
+    private func wait(_ seconds: TimeInterval) {
+        let e = XCTestExpectation(description: "wait")
+        DispatchQueue.global().asyncAfter(deadline: .now() + seconds) { e.fulfill() }
+        XCTWaiter().wait(for: [e], timeout: seconds + 2)
+    }
+
+    func testAFreshSessionHasNotTouchedTheHardware() {
+        XCTAssertFalse(diag.hardwareTouched)
+        XCTAssertTrue(recorder.commands.isEmpty)
+    }
+
+    func testExitRestoreCommandsNothingWhenTheBacklightWasNeverTouched() {
+        XCTAssertTrue(engine.restoreOnExit(level: 0.4), "a no-op exit still reports success")
+        XCTAssertTrue(recorder.commands.isEmpty,
+                      "quitting without ever dimming must not impose auto-brightness and a level")
+    }
+
+    func testExitRestoreCommandsOnceTheBacklightHasBeenTouched() {
+        engine.start(frequencyHz: 20, duty: 0.5)
+        wait(0.15)
+        XCTAssertTrue(diag.hardwareTouched)
+        engine.restoreOnExit(level: 0.4)
+        XCTAssertEqual(recorder.commands.last, .restore(0.4))
+        XCTAssertFalse(engine.isRunning)
+    }
+
+    func testExitRestoreStillForcesAfterASuppressionOnlyTouch() {
+        // The calibration shape: the hardware was mutated, but the engine is
+        // not running, so `engaged`-gated logic would decline and leave the
+        // ambient light sensor switched off.
+        diag.noteHardwareTouched()
+        _ = recorder.assertSuppression()
+        engine.restoreOnExit(level: 0.4)
+        XCTAssertEqual(recorder.commands.last, .restore(0.4),
+                       "a suppression-only session must still hand control back")
+    }
+
+    func testHardwareTouchedSurvivesACounterReset() {
+        diag.noteCommand(kind: "brightness", value: 0.0625, latencyMs: 0.2)
+        XCTAssertTrue(diag.hardwareTouched)
+        diag.reset()
+        XCTAssertEqual(diag.snapshot(), EngineCounters(), "reset clears the measurement…")
+        XCTAssertTrue(diag.hardwareTouched, "…but not the fact that the hardware was touched")
+    }
+
+    func testAnyMutatingCommandKindSetsTheFlag() {
+        for kind in ["brightness", "brightness-fade", "auto-brightness", "idle-dim-suspend"] {
+            let d = EngineDiagnostics()
+            XCTAssertFalse(d.hardwareTouched)
+            d.noteCommand(kind: kind, latencyMs: 0.1)
+            XCTAssertTrue(d.hardwareTouched, "\(kind) mutates the backlight state")
+        }
+    }
+}

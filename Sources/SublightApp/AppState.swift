@@ -266,17 +266,24 @@ final class AppState: ObservableObject {
                 object: nil, queue: .main
             ) { [weak self] _ in
                 MainActor.assumeIsolated {
-                    // Force: calibration disables auto-brightness with a direct
-                    // bridge write that never engages the engine, so a plain
-                    // restoreNow() (gated on `engaged`) could leave the ALS off.
-                    self?.controller?.panicRestore(to: 0.4)
-                    Log.lifecycle.info("terminating: backlight restored")
+                    // Forces once we HAVE touched the hardware — calibration
+                    // disables auto-brightness with a direct bridge write that
+                    // never engages the engine, so a plain restoreNow() (gated
+                    // on `engaged`) could leave the ALS off. But it commands
+                    // NOTHING if this session never touched the backlight:
+                    // launching, not dimming, and quitting must not overwrite
+                    // the level and auto-brightness the user already had.
+                    self?.controller?.restoreOnExit(to: 0.4)
+                    Log.lifecycle.info("terminating: exit restore evaluated")
                 }
             }
 
-            // SIGTERM / SIGINT / SIGHUP: restore on the engine queue, then exit.
+            // SIGTERM / SIGINT / SIGHUP: restore on the engine queue, then
+            // exit. Same gate as terminate — unlike the CLI, the app installs
+            // these handlers at launch whether or not it ever dims, so an
+            // unconditional force would have the same quiet-case bug.
             signalRestore = SignalRestore { [weak c] in
-                c?.panicRestore(to: 0.4)
+                c?.restoreOnExit(to: 0.4)
             }
 
             if scheduleEnabled {

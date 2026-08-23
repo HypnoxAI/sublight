@@ -158,10 +158,32 @@ dither is still visible as flicker at the ceiling.
   Control Center is open. Sublight writes the backlight value many times a
   second; Control Center polls it and redraws. Cosmetic, only visible when
   you're looking at it, and inherent to dithering.
-- **Above ~10 Hz macOS starts merging the commands**, so the light can look
-  steady because it has stopped flickering — not because your eye fused it. That
-  also means it stops going below the floor. Calibration flags this if your
-  result lands at the ceiling.
+- **There is a hard stability ceiling at 8 Hz on the reference machine.** Above
+  it — measured, 8.5 Hz fails within 30 seconds — the backlight daemon stops
+  honouring the dither and the keys fall completely dark for a second or more,
+  repeating every one to three seconds. It is a limit on how short a dither
+  *cycle* the daemon will act on (117.6 ms fails, 125.0 ms holds), not command
+  coalescing and not your eye fusing the flicker; duty makes no difference and
+  neither read-back API can see it happen. Sublight refuses to run above the
+  ceiling and logs any request it clamps, so you cannot land there by accident.
+
+  **Re-qualify after a macOS update.** The ceiling is a property of the daemon,
+  so an OS update can move it. Soak the current ceiling for five minutes and
+  watch the keys at roughly 0:30, 2:30 and 4:30:
+
+  ```bash
+  sublight-cli hold --freq 8 --duty 0.15 --seconds 300
+  ```
+
+  Any dark envelope at any glance means the boundary moved: find the lowest
+  frequency that fails, subtract 0.5 Hz, and that is the new
+  `DitherEngine.maxStableFrequencyHz`. Please file a **Hardware report** with
+  what you find.
+
+- **The dither is still visible as flicker at the ceiling** on the reference
+  machine. Fusing it into a steady glow would need a frequency the daemon will
+  not hold, so Sublight ships the honest version rather than one that looks
+  smooth because it has stopped dimming.
 - **Yield-to-manual-control is parked**: the reference machine has no
   keyboard-brightness keys, so there is nothing to yield to. See SPEC §11.
 
@@ -170,8 +192,9 @@ dither is still visible as flicker at the ceiling.
 The private API cannot set a static level below the floor — it accepts the value,
 reports success, and the driver clamps the actual light. The only way under is to
 alternate between the floor and off; the LED's physical response and your eye's
-flicker fusion average that into a sub-floor brightness. macOS coalesces commands
-faster than ~10 Hz, and below ~5 Hz you see distinct pulses, so the usable band is
+partial fusion average that into a sub-floor brightness. The daemon refuses to act
+on cycles shorter than ~125 ms (so ~8 Hz is the hard ceiling, see Known
+limitations), and below ~3 Hz the pulsing is obtrusive, so the usable band is
 narrow.
 
 The full account — including the reverse-engineering record, the dead ends, and

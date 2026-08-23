@@ -183,6 +183,16 @@ public final class EngineDiagnostics: @unchecked Sendable {
     private var lastValue: Float?
     private var lastValueAtNanos: UInt64?
 
+    /// True once this PROCESS has issued any backlight-mutating command —
+    /// a dither edge, a suppression flag, a calibration write, a restore.
+    ///
+    /// Deliberately NOT cleared by `reset()`. `reset()` brackets one
+    /// measurement; this is a fact about the session that cannot be undone,
+    /// and the exit path depends on it: a process that never touched the
+    /// backlight must exit without imposing auto-brightness and a level on
+    /// whatever state the user already had.
+    private var _hardwareTouched = false
+
     public init() {}
 
     /// Last commanded brightness level and the monotonic time of the call.
@@ -200,6 +210,21 @@ public final class EngineDiagnostics: @unchecked Sendable {
         c.high.scheduled = highBase &+ highInRun
         c.low.scheduled = lowBase &+ lowInRun
         return c
+    }
+
+    /// See `_hardwareTouched`: survives `reset()` by design.
+    public var hardwareTouched: Bool {
+        lock.lock(); defer { lock.unlock() }
+        return _hardwareTouched
+    }
+
+    /// Mark that a backlight-mutating command is about to be issued. Called by
+    /// the bridge for every real daemon mutation, and by the engine at its
+    /// commander seam so the flag is observable when a test stands in for the
+    /// hardware.
+    public func noteHardwareTouched() {
+        lock.lock(); defer { lock.unlock() }
+        _hardwareTouched = true
     }
 
     public func reset() {
@@ -283,6 +308,7 @@ public final class EngineDiagnostics: @unchecked Sendable {
         lock.lock(); defer { lock.unlock() }
         counters.latency.record(latencyMs)
         counters.commandsByKind[kind, default: 0] &+= 1
+        _hardwareTouched = true
         if let value {
             lastValue = value
             lastValueAtNanos = atNanos ?? DispatchTime.now().uptimeNanoseconds

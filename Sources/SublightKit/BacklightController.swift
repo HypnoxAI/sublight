@@ -126,6 +126,18 @@ public final class BacklightController {
         return engine.restoreNow(force: true)
     }
 
+    /// Exit-time restore for terminate and signal handlers: identical to
+    /// `panicRestore` once this process has commanded the backlight, and a
+    /// no-op when it never has. See DitherEngine.restoreOnExit.
+    @discardableResult
+    public func restoreOnExit(to level: Float = 0.4) -> Bool {
+        engine.restoreOnExit(level: level)
+    }
+
+    /// True once any backlight-mutating command has been issued this session,
+    /// including calibration's direct bridge writes.
+    public var hardwareTouched: Bool { EngineDiagnostics.shared.hardwareTouched }
+
     /// Launch-time crash recovery (see DirtyFlag). Call once, before any
     /// other backlight command.
     @discardableResult
