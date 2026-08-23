@@ -22,6 +22,14 @@ stability on.
   automation that fires unattended does not get to be the first thing that
   turns dimming on. The CLI does not block (it is a research harness) but every
   mutating command points at `SAFETY.md` on stderr until the marker exists.
+- **A menu bar icon legend that cannot drift.** `StatusGlyph` moved into the
+  kit, and `sublight-cli glyph render --out <dir>` draws the four states from
+  that same code — per-state PNGs at 1x and 2x plus a composed legend showing
+  Off / Low / Medium / High over both a dark and a light menu bar. The render
+  is deterministic, so re-running it on an unchanged glyph produces
+  byte-identical output and a diff there means the drawing really changed. Only
+  the legend is committed; the runtime icon stays code-drawn and no PNG ships as
+  an app resource. README and SPEC §8 both embed it.
 - **`docs/COREBRIGHTNESS.md`** — the research record. Methodology (runtime
   lookup, the `dump`/`sig` harness, command-truth instrumentation, and the
   human-in-the-loop visual protocol, with the reason it has to exist), then

@@ -93,9 +93,22 @@ swift build -c release --product sublight-cli
 
 ## Using it
 
-Sublight lives in the menu bar — no Dock icon, no window. The glyph's keys are
-hollow while the backlight is under system control and fill from the right as
-Sublight takes over.
+Sublight lives in the menu bar — no Dock icon, no window.
+
+### The menu bar icon
+
+![Sublight menu bar icon states](assets/icons/sublight-menubar-states.png)
+
+Hollow keys mean Sublight is not dimming — either you have it off, or the system
+has suspended it (sleep, screens off, a fast user switch). The keys then fill
+from the right as the active preset rises: 3 of 10 at Low, 5 at Medium, 8 at
+High. The icon is a template image, so macOS tints it to match the menu bar's
+light or dark appearance and reduced-transparency modes; the two rows above show
+the same four states as macOS would draw them.
+
+*(The icon is drawn in code at runtime — no PNG is bundled. The legend above is
+regenerated from that same drawing with `sublight-cli glyph render`, so it
+cannot drift from the geometry.)*
 
 **First launch** walks through a short onboarding: what the app does, the safety
 warning (with an acknowledgment you have to tick), and an offer to calibrate.

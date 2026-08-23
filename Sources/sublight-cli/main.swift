@@ -50,6 +50,10 @@ func printUsage() {
       sublight-cli restore [<0..1>]           Panic restore (default lands at 0.30)
       sublight-cli notify-probe               Spike: can the change-notification tell your
                                               keypress from our writes? (interactive)
+      sublight-cli glyph render --out <dir>   DEV: render the menu bar icon's states and the
+                                              README legend from StatusGlyph. Touches no
+                                              hardware; deterministic, so re-rendering an
+                                              unchanged glyph produces identical bytes.
 
     STABILITY CEILING:
       The engine refuses to dither above a MEASURED ceiling (8.0 Hz on the
@@ -530,7 +534,9 @@ guard let command = args.first else {
 
 // Capability probe gate. `help`, `sig`, and `dump` are exempt: they never
 // command the backlight, and they are how a failing probe gets diagnosed.
-if !["help", "--help", "-h", "sig", "signatures", "dump"].contains(command) {
+// `glyph` joins the exempt list: it draws pictures and never speaks to the
+// daemon, so it must not require a verified private-API surface to run.
+if !["help", "--help", "-h", "sig", "signatures", "dump", "glyph"].contains(command) {
     let report = validateAPISurface()
     if !report.passed {
         fputs(report.text + "\n", stderr)
@@ -1156,6 +1162,27 @@ case "notify-probe":
     print("  • all≈0                   → nil keys was wrong / wrong mechanism; try other keys.")
     print("Report the three numbers.")
     exit(0)
+
+case "glyph":
+    guard args.count > 1, args[1] == "render" else {
+        fputs("usage: sublight-cli glyph render --out <dir>\n", stderr)
+        exit(1)
+    }
+    guard let outPath = flagValue(args, "--out") else {
+        fputs("usage: sublight-cli glyph render --out <dir>\n", stderr)
+        exit(1)
+    }
+    do {
+        let dir = URL(fileURLWithPath: (outPath as NSString).expandingTildeInPath)
+        let written = try GlyphLegend.render(to: dir)
+        for name in written { print("  \(dir.appendingPathComponent(name).path)") }
+        print("\n\(written.count) files. Only \(GlyphLegend.legendFileName) is committed —")
+        print("the runtime glyph stays code-drawn; no PNG ships as an app resource.")
+        exit(0)
+    } catch {
+        fputs("error: \(error)\n", stderr)
+        exit(2)
+    }
 
 case "restore":
     guard let c = makeController(args: args) else { exit(2) }

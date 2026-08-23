@@ -92,6 +92,21 @@ coalesced away while its queue was blocked; `fired - executed` is what engine
 policy declined to send. Both read as darkness on the keys and neither is
 visible from the LED alone.
 
+### The menu bar glyph
+
+The status item is drawn in code (`Sources/SublightKit/StatusGlyph.swift`), never
+bundled as an image. **Any change to it must regenerate the legend** so the docs
+cannot drift from the geometry:
+
+```bash
+swift build -c release --product sublight-cli
+.build/release/sublight-cli glyph render --out /tmp/glyph
+cp /tmp/glyph/sublight-menubar-states.png assets/icons/
+```
+
+The render is deterministic — an unchanged glyph produces byte-identical output,
+so a diff there means the drawing really did change.
+
 ## Scope reminders
 
 Sublight is intentionally narrow: Apple Silicon MacBooks with a backlit

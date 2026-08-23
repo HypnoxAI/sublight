@@ -1,3 +1,18 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Hypnox Technologies LLC
+//
+//  StatusGlyph.swift
+//  SublightKit
+//
+//  Lives in the KIT, not the app, so the legend in the README can be rendered
+//  from this exact code (`sublight-cli glyph render`). Documentation that
+//  describes an icon by hand drifts from the icon; documentation generated
+//  from the drawing cannot. AppKit in the kit is fine here — the package is
+//  macOS-only by construction and AppKit is inside the zero-dependency policy.
+//
+//  Licensed under the Apache License 2.0 — see LICENSE.
+//
+
 import AppKit
 
 /// Sublight's stateful menu bar glyph: a keyboard whose keys are hollow while
@@ -16,8 +31,20 @@ public enum StatusGlyph {
     /// fresh image each time.
     private static var cache: [CGFloat: NSImage] = [:]
 
+    /// Total keys on the deck. The fill levels are chosen so each preset
+    /// lands on a whole number of these: 0 / 3 / 5 / 8 of 10.
+    public static let keyCount = 10
+
+    /// How many keys are drawn filled at this level. Public because the legend
+    /// and the README quote these counts, and a number quoted by hand is a
+    /// number that will eventually be wrong.
+    public static func litKeyCount(litFraction: CGFloat) -> Int {
+        let clamped = max(0.0, min(1.0, litFraction))
+        return Int((clamped * CGFloat(keyCount)).rounded())
+    }
+
     /// litFraction 0.0 = all keys hollow (Off), 1.0 = all keys filled.
-    /// Suggested mode mapping: Off 0.0, Low 0.3, Medium 0.5, High 0.8.
+    /// Mode mapping: Off 0.0, Low 0.3, Medium 0.5, High 0.8.
     public static func image(litFraction: CGFloat) -> NSImage {
         let clamped = max(0.0, min(1.0, litFraction))
         if let cached = cache[clamped] { return cached }
@@ -56,7 +83,7 @@ public enum StatusGlyph {
         deck.stroke()
 
         let rects = keyRects()
-        let litCount = Int((litFraction * CGFloat(rects.count)).rounded())
+        let litCount = litKeyCount(litFraction: litFraction)
         let rightmostFirst = rects.indices.sorted { rects[$0].midX > rects[$1].midX }
         let lit = Set(rightmostFirst.prefix(litCount))
 
