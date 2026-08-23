@@ -4,7 +4,19 @@
 //  AppState.swift
 //  SublightApp
 //
-//  Owns the BacklightController and app state.
+//  Owns the BacklightController and app state — as a FORWARDER. AppState
+//  holds intent and policy and calls DitherEngine; it contains no backlight
+//  timing and issues no CoreBrightness calls itself. Engine state comes back
+//  through onStateChange on the main actor. The one timer that remains here
+//  is the 60 s time-of-day schedule — wall-clock policy, not backlight timing.
+//
+//  Running decision, in ONE place (`effectiveRunning`, via DimmingPolicy):
+//
+//      effectiveRunning = isEnabled && !systemSuspended
+//
+//  `isEnabled` is the user's intent (toggle, hotkey, schedule);
+//  `systemSuspended` is the machine's state (sleep, screens off, session
+//  inactive). Suspension never clears the intent, so resume re-engages.
 //
 //  Frequency: continuous, sub-floor dithering (SPEC §3/§5).
 //    Simple   → on/off + brightness, fixed 9 Hz.
@@ -50,8 +62,13 @@ final class AppState: ObservableObject {
     // MARK: Published UI state
 
     @Published var isEnabled: Bool = false { didSet { apply() } }
-    @Published var frequencyHz: Double = 9.0 { didSet { scheduleApply() } }
-    @Published var brightness: Double = 0.5 { didSet { scheduleApply() } }
+    @Published var frequencyHz: Double = 9.0 { didSet { apply() } }
+    @Published var brightness: Double = 0.5 { didSet { apply() } }
+    /// The machine is asleep, its screens are off, or the login session is
+    /// inactive. Set only by SleepWakeObserver transitions.
+    @Published private(set) var systemSuspended: Bool = false { didSet { apply() } }
+    /// Mirror of the engine's state, delivered on the main actor.
+    @Published private(set) var engineState: EngineState = .stopped
     @Published var advancedMode: Bool = false { didSet { onAdvancedChanged() } }
     @Published var acknowledged: Bool = false
     @Published var launchAtLogin: Bool = false { didSet { updateLoginItem() } }
@@ -78,6 +95,9 @@ final class AppState: ObservableObject {
 
     @Published var available: Bool = false
     @Published var statusText: String = ""
+    /// The launch-time private-API probe. Controls are disabled when it
+    /// fails; the text is what the user is asked to paste into an issue.
+    @Published private(set) var probeReport: ValidationReport?
 
     /// Per-machine calibration. nil until the guided flow has been run on
     /// THIS hardware model — defaults are only known-good on one machine.
@@ -93,18 +113,10 @@ final class AppState: ObservableObject {
     private(set) var controller: BacklightController?
     private var sleepWake: SleepWakeObserver?
     private var terminateToken: NSObjectProtocol?
-    private var napActivity: NSObjectProtocol?
-    private var watchdog: Timer?
+    private var signalRestore: SignalRestore?
     private var scheduleTimer: Timer?
-    private var fadeTask: Task<Void, Never>?
-    private var applyDebounce: Task<Void, Never>?
     private let hotKeyManager = HotKeyManager()
     private var onboardingWindow: NSWindow?
-    /// Tracks the enabled state across applies so we only fade on an actual
-    /// transition — not on every slider tick.
-    private var wasEnabled = false
-    /// Last level we commanded, so a fade starts from where the light is.
-    private var lastLevel: Float = 0.4
     private var lastInWindow: Bool?
     private var isUpdatingLoginItem = false
 
@@ -119,10 +131,6 @@ final class AppState: ObservableObject {
         static let schedStart = "sublight.schedule.start"
         static let schedEnd = "sublight.schedule.end"
         static let schedFreq = "sublight.schedule.frequency"
-        /// Set while dimming is engaged, cleared on every clean restore. If
-        /// it survives to the next launch, the previous run was killed
-        /// mid-dither and the backlight needs rescuing.
-        static let activeMarker = "sublight.active"
         static let hotKey = "sublight.hotkey"
         static let schedMode = "sublight.schedule.mode"
         static let latitude = "sublight.location.latitude"
@@ -183,21 +191,38 @@ final class AppState: ObservableObject {
             return
         }
 
+        // Capability probe BEFORE any engine use. A drifted private API is
+        // undefined behavior at the ABI level (a misdeclared register-class
+        // argument silently corrupts every later argument), so on failure the
+        // app disables itself rather than guess.
+        let report = validateAPISurface()
+        probeReport = report
+        guard report.passed else {
+            available = false
+            statusText = "Private API changed on this macOS build (\(report.macOSBuild)); Sublight disabled itself."
+            Log.probe.error("API surface validation failed: \(report.text, privacy: .public)")
+            showProbeFailureAlert(report)
+            return
+        }
+
         do {
             let storedFloor = defaults.object(forKey: Keys.floor) as? Float ?? 0.0625
             let c = try BacklightController(floor: storedFloor)
+            c.engine.restoreLevel = 0.4
             controller = c
             available = true
 
-            // Crash recovery. The marker is written while dimming is engaged
-            // and cleared on every clean restore, so if it is still set at
-            // launch the previous run was killed mid-dither (kill -9, panic,
-            // force quit) and the backlight was left wherever the dither
-            // stopped — possibly off. Rescue it before doing anything else.
-            if defaults.bool(forKey: Keys.activeMarker) {
-                Log.lifecycle.warning("previous session did not restore cleanly — restoring backlight")
-                c.panicRestore(to: 0.4)
-                defaults.removeObject(forKey: Keys.activeMarker)
+            // Crash recovery: if the previous process died mid-dither
+            // (kill -9, panic, force quit) the dirty flag — or the legacy
+            // UserDefaults marker — is still present; restore before anything
+            // else touches the backlight.
+            let recovery = c.recoverFromCrashIfNeeded()
+            if recovery != .clean {
+                Log.lifecycle.warning("crash recovery at launch: \(String(describing: recovery), privacy: .public)")
+            }
+
+            c.engine.onStateChange = { [weak self] s in
+                MainActor.assumeIsolated { self?.engineState = s }
             }
 
             if let b = defaults.object(forKey: Keys.brightness) as? Double {
@@ -208,28 +233,43 @@ final class AppState: ObservableObject {
             }
 
             sleepWake = SleepWakeObserver(
-                onSleep: { [weak self] in
-                    Task { @MainActor in self?.controller?.suspendHold() }
-                },
-                onWake: { [weak self] in
-                    Task { @MainActor in
+                onSuspend: { [weak self] t in
+                    MainActor.assumeIsolated {
                         guard let self else { return }
+                        Log.lifecycle.info("suspend (\(t.rawValue, privacy: .public))")
+                        self.systemSuspended = true
+                    }
+                },
+                onResume: { [weak self] t in
+                    MainActor.assumeIsolated {
+                        guard let self else { return }
+                        Log.lifecycle.info("resume (\(t.rawValue, privacy: .public))")
+                        self.systemSuspended = false
                         if self.scheduleEnabled { self.lastInWindow = nil; self.reevaluateSchedule(force: true) }
-                        else if self.isEnabled { self.apply() }
                     }
                 }
             )
 
+            // Normal exit: a SYNCHRONOUS restore on the engine queue. The
+            // notification is posted on the main thread during terminate, so
+            // this closure runs before the process exits; an async Task here
+            // would not be guaranteed to.
             terminateToken = NotificationCenter.default.addObserver(
                 forName: NSApplication.willTerminateNotification,
                 object: nil, queue: .main
             ) { [weak self] _ in
-                Task { @MainActor in
-                    self?.fadeTask?.cancel()
-                    self?.controller?.panicRestore()
-                    self?.defaults.removeObject(forKey: Keys.activeMarker)
+                MainActor.assumeIsolated {
+                    // Force: calibration disables auto-brightness with a direct
+                    // bridge write that never engages the engine, so a plain
+                    // restoreNow() (gated on `engaged`) could leave the ALS off.
+                    self?.controller?.panicRestore(to: 0.4)
                     Log.lifecycle.info("terminating: backlight restored")
                 }
+            }
+
+            // SIGTERM / SIGINT / SIGHUP: restore on the engine queue, then exit.
+            signalRestore = SignalRestore { [weak c] in
+                c?.panicRestore(to: 0.4)
             }
 
             if scheduleEnabled {
@@ -269,17 +309,20 @@ final class AppState: ObservableObject {
         advancedMode ? frequencyHz : (calibratedFrequency ?? Self.simpleFreq)
     }
 
-    /// Fill level for the menu bar glyph (StatusGlyph): hollow when idle,
-    /// otherwise the frequency actually in use bucketed to the nearest preset —
-    /// Low 3 Hz → 0.3, Medium 6 Hz → 0.5, High 9 Hz → 0.8. Simple mode runs at
-    /// ~9 Hz, so it shows the High fill.
+    /// THE running decision: the user wants dimming AND the machine is awake
+    /// with an active session. Every start/stop flows from this one value
+    /// (see the header comment and DimmingPolicy).
+    var effectiveRunning: Bool {
+        DimmingPolicy.effectiveRunning(userEnabled: isEnabled, systemSuspended: systemSuspended)
+    }
+
+    /// Fill level for the menu bar glyph (StatusGlyph): hollow unless
+    /// effectively running — so suspended reads as hollow even while the
+    /// toggle is on — otherwise the frequency in use bucketed to the nearest
+    /// preset: Low 3 Hz → 0.3, Medium 6 Hz → 0.5, High 9 Hz → 0.8.
     var glyphFraction: CGFloat {
-        guard isEnabled else { return 0 }
-        switch effectiveFrequency {
-        case ..<4.5: return 0.3
-        case ..<7.5: return 0.5
-        default:     return 0.8
-        }
+        CGFloat(DimmingPolicy.glyphFraction(userEnabled: isEnabled, systemSuspended: systemSuspended,
+                                            frequencyHz: effectiveFrequency))
     }
 
     /// A plain-text report for bug reports and support threads.
@@ -325,7 +368,8 @@ final class AppState: ObservableObject {
         lines += [
             "",
             "Mode: \(advancedMode ? "advanced" : "simple")",
-            "Dimming: \(isEnabled ? "on" : "off")",
+            "Dimming: \(isEnabled ? "on" : "off")\(systemSuspended ? " (suspended by system)" : "")",
+            "Engine: \(engineState.isRunning ? "running" : "stopped")",
             String(format: "Effective frequency: %.1f Hz", effectiveFrequency),
             String(format: "Brightness: %.0f%%", brightness * 100),
             "Calibrated: \(isCalibrated ? String(format: "yes, %.1f Hz", calibratedFrequency ?? 0) : "no")",
@@ -410,86 +454,51 @@ final class AppState: ObservableObject {
 
     // MARK: Apply
 
-    private func duty() -> Float { Float(0.15 + brightness * 0.70) }
+    /// Slider position → duty fraction. 0.15…0.85 is the range the engine
+    /// can hold (DitherSchedule.dutyRange); brightness IS duty.
+    private func duty() -> Double { 0.15 + brightness * 0.70 }
 
-    /// Coalesce rapid slider changes. Dragging a slider fires continuously,
-    /// and every call restarts the dither timer — debouncing keeps the light
-    /// smooth while dragging instead of stuttering on each tick.
-    private func scheduleApply() {
-        applyDebounce?.cancel()
-        applyDebounce = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 50_000_000)
-            guard !Task.isCancelled else { return }
-            self?.apply()
-        }
-    }
-
+    /// Forward intent to the engine. Start and stop (with their cosmetic
+    /// duty ramps) happen only on a transition of `effectiveRunning`; while
+    /// running, frequency and duty changes are retunes — setDuty is
+    /// phase-continuous and issues no XPC of its own, so slider drags need
+    /// no debouncing.
     private func apply() {
         guard let c = controller else { return }
 
-        let enabling = isEnabled && !wasEnabled
-        let disabling = !isEnabled && wasEnabled
-        wasEnabled = isEnabled
+        let running = effectiveRunning
+        let f = effectiveFrequency
+        let d = duty()
+        // Source of truth is the ENGINE, not a shadow bool: calibration and
+        // panicRestore can stop the engine out-of-band, and a stale shadow
+        // would strand the UI "on but not dimming" (setFrequency/setDuty are
+        // no-ops on a stopped engine).
+        let engineRunning = c.engine.isRunning
 
-        if isEnabled {
-            let f = advancedMode ? frequencyHz : (calibratedFrequency ?? Self.simpleFreq)
-            c.period = 1.0 / f
-            let target = duty() * c.floor
-            startKeepAlive()
-            defaults.set(true, forKey: Keys.activeMarker)
-
-            if enabling {
-                Log.engine.info("dim on: \(f, privacy: .public) Hz")
-                fade(from: lastLevel, to: target, duration: 0.35)
-            } else {
-                fadeTask?.cancel()
-                c.setLevel(target)
-                lastLevel = target
-            }
+        if running {
+            c.frequencyHz = f
+            // start() is idempotent on the engine queue: a full start when
+            // stopped, an in-place retune (which also cancels any ramp-down)
+            // when running. Calling it unconditionally makes apply() robust to
+            // the engineRunning snapshot being stale — e.g. re-enabling during
+            // the 0.25 s disable ramp, where the ramp may complete between the
+            // sync read and this async call. rampFrom (the enable fade) only
+            // takes effect on a true start; it is ignored on a retune.
+            if !engineRunning { Log.engine.info("dim on: \(f, privacy: .public) Hz") }
+            c.engine.start(frequencyHz: f, duty: d,
+                           rampFrom: engineRunning ? nil : DitherEngine.rampEndpointDuty)
         } else {
-            if disabling {
-                Log.engine.info("dim off")
-                // Ramp back up, THEN hand control to the system. panicRestore
-                // is still called unconditionally so the restore can't be
-                // lost if the fade is interrupted.
-                fade(from: lastLevel, to: 0.4, duration: 0.25) { [weak self] in
-                    self?.finishDisable()
-                }
-            } else {
-                finishDisable()
+            if engineRunning {
+                if systemSuspended { Log.engine.info("dim suspended") } else { Log.engine.info("dim off") }
             }
+            // Idempotent: a no-op if the engine is already stopped. Sleep/
+            // session suspend restores immediately — the display is going away
+            // and a ramp would just delay the hand-back.
+            c.engine.stopAndRestore(ramp: systemSuspended ? 0 : 0.25)
         }
 
         defaults.set(brightness, forKey: Keys.brightness)
         defaults.set(frequencyHz, forKey: Keys.freq)
-    }
-
-    private func finishDisable() {
-        stopKeepAlive()
-        controller?.panicRestore(to: 0.4)
-        lastLevel = 0.4
-        defaults.removeObject(forKey: Keys.activeMarker)
-    }
-
-    /// Ramp between two levels instead of snapping. Purely cosmetic, so every
-    /// restore path cancels it — a half-finished fade must never be able to
-    /// strand the backlight.
-    private func fade(from start: Float, to target: Float, duration: Double,
-                      completion: (() -> Void)? = nil) {
-        fadeTask?.cancel()
-        let steps = 14
-        fadeTask = Task { [weak self] in
-            for i in 1...steps {
-                guard !Task.isCancelled else { return }
-                let t = Float(i) / Float(steps)
-                let level = start + (target - start) * t
-                self?.controller?.setLevel(level)
-                self?.lastLevel = level
-                try? await Task.sleep(nanoseconds: UInt64(duration / Double(steps) * 1_000_000_000))
-            }
-            guard !Task.isCancelled else { return }
-            completion?()
-        }
     }
 
     private func onAdvancedChanged() {
@@ -637,51 +646,17 @@ final class AppState: ObservableObject {
         }
     }
 
-    // MARK: Keep-alive
-
-    private func startKeepAlive() {
-        if napActivity == nil {
-            napActivity = ProcessInfo.processInfo.beginActivity(
-                options: [.userInitiatedAllowingIdleSystemSleep, .latencyCritical],
-                reason: "Sublight keyboard backlight dither")
-        }
-        reassertSuppression()
-        if watchdog == nil {
-            watchdog = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
-                Task { @MainActor in self?.reassertSuppression() }
-            }
-        }
-    }
-    private func stopKeepAlive() {
-        watchdog?.invalidate()
-        watchdog = nil
-        if let a = napActivity {
-            ProcessInfo.processInfo.endActivity(a)
-            napActivity = nil
-        }
-    }
-    private func reassertSuppression() {
-        guard let c = controller, isEnabled else { return }
-        c.bridge.setAutoBrightness(false, c.keyboardID)
-        _ = c.bridge.setIdleDimmingSuspended(true, c.keyboardID)
-    }
-
     // MARK: Actions
 
     func restoreSystemControl() {
-        fadeTask?.cancel()
-        applyDebounce?.cancel()
         isEnabled = false
-        wasEnabled = false
-        finishDisable()
+        // The toggle's apply() already ramps and restores; this is the
+        // explicit button, so make the hand-back immediate and certain.
+        controller?.engine.restoreNow()
     }
 
     func restoreAndQuit() {
-        fadeTask?.cancel()
-        applyDebounce?.cancel()
-        stopKeepAlive()
-        controller?.panicRestore()
-        defaults.removeObject(forKey: Keys.activeMarker)
+        controller?.engine.restoreNow()
         Log.lifecycle.info("quit: backlight restored")
         NSApp.terminate(nil)
     }
@@ -706,6 +681,31 @@ final class AppState: ObservableObject {
             Task { @MainActor in self?.toggleDimming() }
         }
         hotKeyConflict = !ok
+    }
+
+    // MARK: Capability probe failure
+
+    /// Shown once at launch when the private-API surface does not match the
+    /// build Sublight was verified against. Deferred one turn so the alert
+    /// appears after the app has finished launching.
+    private func showProbeFailureAlert(_ report: ValidationReport) {
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = "Sublight disabled itself on \(report.macOSBuild)"
+            alert.informativeText = """
+            The private CoreBrightness interface Sublight depends on does not match \
+            what it was verified against, so driving it could cause undefined behavior. \
+            Sublight will not touch the keyboard backlight on this build.
+
+            Please file an issue at github.com/HypnoxAI/sublight and include this report:
+
+            \(report.text)
+            """
+            alert.alertStyle = .critical
+            alert.addButton(withTitle: "OK")
+            NSApp.activate(ignoringOtherApps: true)
+            alert.runModal()
+        }
     }
 
     // MARK: Onboarding

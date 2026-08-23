@@ -77,7 +77,7 @@ final class CalibrationController: ObservableObject {
 
     private let controller: BacklightController
     private let restoreFloor: Float
-    private let restorePeriod: TimeInterval
+    private let restoreFrequency: Double
 
     private var floorLo = CalibrationController.floorFloor
     private var floorHi = CalibrationController.floorCeil
@@ -94,7 +94,7 @@ final class CalibrationController: ObservableObject {
     init(controller: BacklightController) {
         self.controller = controller
         self.restoreFloor = controller.floor
-        self.restorePeriod = controller.period
+        self.restoreFrequency = controller.frequencyHz
     }
 
     // MARK: Current candidates
@@ -115,6 +115,11 @@ final class CalibrationController: ObservableObject {
     // MARK: Lifecycle
 
     func begin() {
+        // Calibration disables auto-brightness with direct bridge writes that
+        // bypass the engine, so arm the dirty flag: a hard crash mid-calibration
+        // then heals on next launch. Every normal exit (cancel/finishLevel/
+        // discardAndRestore) calls panicRestore, which clears the flag.
+        controller.armCrashRecovery()
         controller.bridge.setAutoBrightness(false, controller.keyboardID)
         floorLo = Self.floorFloor
         floorHi = Self.floorCeil
@@ -135,7 +140,7 @@ final class CalibrationController: ObservableObject {
         isPlaying = false
         guard !saved else { return }
         controller.floor = restoreFloor
-        controller.period = restorePeriod
+        controller.frequencyHz = restoreFrequency
         controller.panicRestore(to: 0.4)
         step = .intro
         round = 0
@@ -206,7 +211,7 @@ final class CalibrationController: ObservableObject {
         let floor = measuredFloor ?? restoreFloor
         playback?.cancel()
         isPlaying = true
-        controller.period = 1.0 / f
+        controller.frequencyHz = f
         controller.setLevel(0.5 * floor)   // mid duty: fair test of steadiness
         playback = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 2_000_000_000)
@@ -236,7 +241,7 @@ final class CalibrationController: ObservableObject {
     func applyPreview() {
         let floor = measuredFloor ?? restoreFloor
         let f = measuredFrequency ?? 9.0
-        controller.period = 1.0 / f
+        controller.frequencyHz = f
         controller.setLevel(Float(previewLevel) * floor)
     }
 
@@ -263,7 +268,7 @@ final class CalibrationController: ObservableObject {
 
     func discardAndRestore() {
         controller.floor = restoreFloor
-        controller.period = restorePeriod
+        controller.frequencyHz = restoreFrequency
         controller.panicRestore(to: 0.4)
     }
 }

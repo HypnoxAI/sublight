@@ -27,8 +27,8 @@ func printUsage() {
       sublight-cli ids                        List keyboard backlight IDs
       sublight-cli dump                       Print KeyboardBrightnessClient's REAL runtime
                                               selectors (verify the bridge's table)
-      sublight-cli sig                        Print the TRUE arg types (type encodings) of the
-                                              key selectors — run before trusting fade results
+      sublight-cli sig                        Run the private-API capability probe and print the
+                                              TRUE type encodings of the key selectors
       sublight-cli get                        Print reported brightness (0..1)
       sublight-cli set <0..1>                 Direct set (subject to the system clamp)
       sublight-cli auto <on|off>              Toggle keyboard auto-brightness
@@ -53,13 +53,24 @@ func printUsage() {
       --floor <f>     Assumed system clamp floor        (default 0.0625)
       --period <s>    Dither period in seconds          (default 0.25)
 
+    EXIT CODES:
+      0   success
+      1   usage error
+      2   backlight unavailable (no Apple Silicon backlit keyboard, bridge failed)
+      3   private-API probe failed: the CoreBrightness surface on this macOS build
+          does not match what Sublight was verified against; nothing was touched.
+          Only `help`, `sig`, and `dump` run without the probe, so the drift can
+          be inspected.
+
     All numbers are normalized 0..1. Start with `dump`, then `sig`, then `probe`.
+    Every long-running command restores the backlight on Ctrl-C, SIGTERM, and SIGHUP;
+    a crash leaves a dirty flag that the next launch of the app or CLI heals.
     """)
 }
 
 func parseFloat(_ s: String?) -> Float? {
-    guard let s else { return nil }
-    return Float(s)
+    guard let s, let v = Float(s), v.isFinite else { return nil }
+    return v
 }
 
 func flagValue(_ args: [String], _ flag: String) -> String? {
@@ -67,12 +78,55 @@ func flagValue(_ args: [String], _ flag: String) -> String? {
     return args[i + 1]
 }
 
+/// Install a forced restore-on-signal for a long-running command that has
+/// engaged the engine or disabled auto-brightness with direct writes (hold,
+/// pulse, probe, dither-test, notify-probe). Quick commands skip this so a
+/// Ctrl-C during e.g. `set` does not turn auto-brightness on behind the user.
+func installRestoreOnSignal(_ c: BacklightController, level: Float = 0.3) {
+    signalRestore = SignalRestore { [weak c] in
+        c?.panicRestore(to: level)
+    }
+}
+
+/// nil = present but invalid; .some(nil) = absent; .some(.some) = a finite value.
+func optionalPeriod(_ args: [String]) -> Double?? {
+    guard let raw = flagValue(args, "--period") else { return .some(nil) }
+    guard let v = Double(raw), v.isFinite, v > 0 else { return nil }
+    return .some(v)
+}
+func optionalFloor(_ args: [String]) -> Float? {
+    guard let raw = flagValue(args, "--floor") else { return 0.0625 }
+    guard let v = Float(raw), v.isFinite, v > 0 else { return nil }
+    return v
+}
+
+/// Retained for the process lifetime: the restore-on-signal sources.
+var signalRestore: SignalRestore?
+/// Set once the launch probe gate has passed. Recovery commands the backlight,
+/// so it must not run for probe-exempt commands (help/sig/dump) on an
+/// unverified API surface.
+var apiVerified = false
+
 func makeController(args: [String]) -> BacklightController? {
     do {
-        let floor = parseFloat(flagValue(args, "--floor")) ?? 0.0625
+        guard let period = optionalPeriod(args) else {
+            fputs("error: --period must be a finite number\n", stderr)
+            return nil
+        }
+        guard let floor = optionalFloor(args) else {
+            fputs("error: --floor must be a finite number\n", stderr)
+            return nil
+        }
         let controller = try BacklightController(floor: floor)
-        if let p = flagValue(args, "--period"), let period = Double(p) {
-            controller.period = period
+        if let period { controller.period = period }
+
+        // Crash recovery commands the backlight, so only after the API surface
+        // was verified (never for the exempt read-only commands).
+        if apiVerified {
+            let recovery = controller.recoverFromCrashIfNeeded()
+            if recovery != .clean {
+                fputs("note: previous run did not restore cleanly (\(recovery)) — backlight restored\n", stderr)
+            }
         }
         return controller
     } catch {
@@ -95,15 +149,15 @@ func bothReadbacks(_ c: BacklightController) -> (Float?, Float?) {
 
 func phaseSignatures(_ c: BacklightController) {
     banner("Phase 0 — signatures (verify types before believing fade results)")
-    let sel = "setBrightness:fadeSpeed:commit:forKeyboard:"
-    if let enc = c.bridge.methodSignature(sel) {
+    let sel = APISurface.expectedEncodings[0].selector   // the fade setter
+    let report = validateAPISurface()
+    if let enc = report.observed[sel] ?? nil {
         print("  \(sel)")
         print("      raw : \(enc)")
         print("      read: \(c.bridge.decodeSignature(enc))")
         print("  The bridge is built for: fadeSpeed=int (enum), commit=BOOL.")
-        if !(enc.contains("i") || enc.contains("l") || enc.contains("q")) {
-            print("  ⚠️  No integer arg detected where fadeSpeed was expected — the")
-            print("      signature changed on this build. Re-check types before the fade phase.")
+        if let failure = report.failures.first(where: { $0.selector == sel }) {
+            print("  ⚠️  \(failure) — re-check types before the fade phase.")
         }
     } else {
         print("  \(sel)\n      (absent — fade experiment will be skipped)")
@@ -199,6 +253,15 @@ func phaseRamp(_ c: BacklightController) {
 }
 
 // MARK: - Fast-dither spike helpers
+//
+// JUDGMENT CALL: these loops are deliberately NOT the DitherEngine. They are
+// the instruments of `dither-test` — a raw, unpaced hammer to find the API's
+// call-rate ceiling, a spin-paced ladder far above the engine's band, and a
+// sleep-paced slow sweep that measures the daemon's own fade response with
+// nothing in the way. Routing them through the engine would measure the
+// engine instead of the API. The dither paths that are a product feature —
+// `hold` and `pulse` — run on DitherEngine. Every call here still goes
+// through the queue-confined bridge.
 
 /// Busy-wait until `nanos` have elapsed. Spins a core — fine for a short spike;
 /// it is the most reliable way to hit sub-millisecond phase timing.
@@ -277,6 +340,18 @@ guard let command = args.first else {
     exit(1)
 }
 
+// Capability probe gate. `help`, `sig`, and `dump` are exempt: they never
+// command the backlight, and they are how a failing probe gets diagnosed.
+if !["help", "--help", "-h", "sig", "signatures", "dump"].contains(command) {
+    let report = validateAPISurface()
+    if !report.passed {
+        fputs(report.text + "\n", stderr)
+        fputs("Refusing to drive the backlight on an unverified API surface. Please file an issue with the report above.\n", stderr)
+        exit(3)
+    }
+    apiVerified = true
+}
+
 switch command {
 
 case "help", "--help", "-h":
@@ -320,31 +395,24 @@ case "dump":
     exit(0)
 
 case "sig", "signatures":
-    guard let c = makeController(args: args) else { exit(2) }
-    let sels = [
-        "brightnessForKeyboard:",
-        "backlightLevelForKeyboard:",
-        "setBrightness:forKeyboard:",
-        "setBrightness:fadeSpeed:commit:forKeyboard:",
-        "suspendIdleDimming:forKeyboard:",
-        "isIdleDimmingSuspendedOnKeyboard:",
-        "isAmbientFeatureAvailableOnKeyboard:",
-        "enableAutoBrightness:forKeyboard:",
-    ]
+    let report = validateAPISurface()
+    print(report.text)
+    print("")
     print("True selector type encodings on THIS machine.")
     print("The fade setter is built for: brightness=float, fadeSpeed=int (enum), commit=BOOL,")
-    print("keyboardID=unsigned long long. If the read line below disagrees, the signature")
-    print("changed on your build — report before running the fade phase.\n")
-    for s in sels {
-        if let enc = c.bridge.methodSignature(s) {
+    print("keyboardID=unsigned long long. Any mismatch above means the signature changed")
+    print("on your build — file an issue with this output before running the fade phase.\n")
+    let decoder = try? KeyboardBrightnessBridge()   // decode is a pure string helper
+    for s in APISurface.introspectionSelectors {
+        if let enc = report.observed[s] ?? nil {
             print("  \(s)")
             print("      raw : \(enc)")
-            print("      read: \(c.bridge.decodeSignature(enc))\n")
+            if let d = decoder { print("      read: \(d.decodeSignature(enc))\n") } else { print("") }
         } else {
             print("  \(s)\n      (absent on this machine)\n")
         }
     }
-    exit(0)
+    exit(report.passed ? 0 : 3)
 
 case "get":
     guard let c = makeController(args: args) else { exit(2) }
@@ -386,6 +454,7 @@ case "auto":
 
 case "probe":
     guard let c = makeController(args: args) else { exit(2) }
+    installRestoreOnSignal(c)   // disables auto-brightness below; restore on Ctrl-C
     print("=== Sublight comprehensive probe ===")
     print("Dim room, other keyboard tools quit. Your EYES are the instrument —")
     print("the read-back columns can lie (SPEC §6.4). If the light gets stuck,")
@@ -428,6 +497,7 @@ case "probe":
 
 case "dither-test":
     guard let c = makeController(args: args) else { exit(2) }
+    installRestoreOnSignal(c)   // forces auto-brightness off below; restore on Ctrl-C
     let floor = c.floor
     let duty = parseFloat(flagValue(args, "--duty")).map { Double($0) } ?? 0.5
 
@@ -556,16 +626,8 @@ case "hold":
     }
     print("Ctrl-C restores auto-brightness and lands at the floor.\n")
 
+    installRestoreOnSignal(c, level: max(c.floor, 0.2))
     c.setLevel(value)
-
-    signal(SIGINT, SIG_IGN)
-    let sigintSource = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
-    sigintSource.setEventHandler {
-        print("\nrestoring…")
-        c.panicRestore(to: max(c.floor, 0.2))
-        exit(0)
-    }
-    sigintSource.resume()
     dispatchMain()
 
 case "pulse":
@@ -593,22 +655,15 @@ case "pulse":
     c.period = 1.0 / freq
     // A sub-floor level whose implied duty (level / floor) equals `duty`, so the
     // dither runs at `freq` with the requested on-fraction.
+    installRestoreOnSignal(c, level: max(c.floor, 0.2))
     c.setLevel(Float(duty) * c.floor)
-
-    signal(SIGINT, SIG_IGN)
-    let pulseSigint = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
-    pulseSigint.setEventHandler {
-        print("\nstopping…")
-        c.panicRestore(to: max(c.floor, 0.2))
-        exit(0)
-    }
-    pulseSigint.resume()
     print("pulsing… (Ctrl-C to stop)")
     dispatchMain()
 
 case "notify-probe":
     guard let c = makeController(args: args) else { exit(2) }
-    let sel = "registerNotificationForKeys:keyboardID:block:"
+    installRestoreOnSignal(c)
+    let sel = APISurface.notificationSelector
     print("=== Notification probe (yield-to-manual spike) ===")
     print("Question: can the keyboard change-notification tell YOUR keypress apart")
     print("from Sublight's own backlight writes? That decides how yield-to-manual works.\n")
@@ -681,9 +736,14 @@ case "notify-probe":
 case "restore":
     guard let c = makeController(args: args) else { exit(2) }
     let level = parseFloat(args.count > 1 ? args[1] : nil) ?? 0.3
-    c.panicRestore(to: min(max(level, 0), 1))
-    print("restored: auto-brightness on, level \(String(format: "%.2f", level))")
-    exit(0)
+    let ok = c.panicRestore(to: min(max(level, 0), 1))
+    if ok {
+        print("restored: auto-brightness on, level \(String(format: "%.2f", level))")
+        exit(0)
+    } else {
+        fputs("restore command was rejected by the daemon — try the keyboard brightness keys\n", stderr)
+        exit(2)
+    }
 
 default:
     fputs("unknown command: \(command)\n\n", stderr)

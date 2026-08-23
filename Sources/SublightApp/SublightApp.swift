@@ -57,7 +57,7 @@ struct SublightApp: App {
             // state: hollow when idle, filling from the right with frequency.
             Image(nsImage: StatusGlyph.image(litFraction: state.glyphFraction))
                 .accessibilityLabel("Sublight")
-                .accessibilityValue(state.isEnabled ? "dimming" : "idle")
+                .accessibilityValue(state.systemSuspended ? "suspended" : (state.isEnabled ? "dimming" : "idle"))
         }
         .menuBarExtraStyle(.window)
 

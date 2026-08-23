@@ -4,16 +4,17 @@
 //  BacklightController.swift
 //  SublightKit
 //
-//  The public face of the engine. One call — setLevel(_:) — routes to the
-//  right engine:
+//  The public face of the engine: composition root for the bridge, the
+//  engine, and the per-machine floor. One call — setLevel(_:) — routes to
+//  the right path:
 //
-//      level == 0            → direct set to 0 (off is a legal value)
+//      level == 0            → restore (if engaged), then direct set to 0
 //      0 < level < floor     → Engine B: dither hold (duty = level / floor)
-//      level >= floor        → Engine A: direct set (fully idle afterwards)
+//      level >= floor        → restore (if engaged), then direct set
 //
-//  Entering the sub-minimum zone also disables keyboard auto-brightness
-//  (saving its prior state) so the ambient light sensor doesn't fight the
-//  hold loop; leaving the zone restores it.
+//  Every direct set goes through the queue-confined bridge, so it is ordered
+//  with respect to the dither edges. Every path that leaves the sub-minimum
+//  zone commands a restore to system control first (DitherEngine's rule).
 //
 //  Licensed under the Apache License 2.0 — see LICENSE.
 //
@@ -24,6 +25,7 @@ public final class BacklightController {
 
     public let bridge: KeyboardBrightnessBridge
     public let keyboardID: UInt64
+    public let engine: DitherEngine
 
     /// The assumed macOS clamp floor, normalized [0, 1].
     ///
@@ -32,17 +34,27 @@ public final class BacklightController {
     /// Run `sublight-cli probe` on your machine and adjust (persisted by the
     /// app via UserDefaults, or pass --floor to the CLI).
     public var floor: Float {
-        didSet { floor = min(max(floor, 0.005), 0.5) }
+        didSet {
+            floor = min(max(floor, 0.005), 0.5)
+            engine.highLevel = floor
+        }
     }
 
-    /// Dither period while holding sub-minimum. Placeholder pending
-    /// calibration; see SPEC §5.4.
-    public var period: TimeInterval = 0.25
+    /// Dither frequency while holding sub-minimum. Applied on the next
+    /// `setLevel`; changing it mid-run takes a new timing anchor.
+    public var frequencyHz: Double = 9.0 {
+        didSet { frequencyHz = min(max(frequencyHz, DitherEngine.frequencyRange.lowerBound),
+                                   DitherEngine.frequencyRange.upperBound) }
+    }
 
-    public private(set) var isHolding = false
+    /// Period form of `frequencyHz`, for callers that think in seconds
+    /// (the CLI's --period flag).
+    public var period: TimeInterval {
+        get { 1.0 / frequencyHz }
+        set { frequencyHz = 1.0 / newValue }
+    }
 
-    private let dither: DitherEngine
-    private var savedAutoBrightness: Bool?
+    public var isHolding: Bool { engine.isRunning }
 
     // MARK: - Init
 
@@ -50,11 +62,11 @@ public final class BacklightController {
         let bridge = try KeyboardBrightnessBridge()
         self.bridge = bridge
         self.keyboardID = bridge.resolveBuiltInKeyboard()
-        self.floor = min(max(floor, 0.005), 0.5)
-        let id = self.keyboardID
-        self.dither = DitherEngine { value in
-            bridge.setBrightness(value, id)
-        }
+        let f = min(max(floor, 0.005), 0.5)
+        self.floor = f
+        self.engine = DitherEngine(
+            commander: BridgeCommander(bridge: bridge, keyboardID: keyboardID),
+            highLevel: f)
     }
 
     // MARK: - Unified level control
@@ -65,21 +77,26 @@ public final class BacklightController {
         let l = min(max(level, 0), 1)
 
         if l < 0.001 {
-            releaseHoldIfNeeded()
+            engine.restoreNow()
             bridge.setBrightness(0, keyboardID)
             return
         }
 
         if l >= floor {
-            releaseHoldIfNeeded()
+            engine.restoreNow()
             bridge.setBrightness(l, keyboardID)
             return
         }
 
-        // Sub-minimum zone.
-        beginHoldIfNeeded()
-        let duty = Double(l / floor) // first-order linear model; SPEC §5.3
-        dither.run(DitherEngine.Parameters(period: period, duty: duty, high: floor, low: 0))
+        // Sub-minimum zone. First-order linear model (SPEC §5.3); the engine
+        // clamps the duty to its holdable range.
+        let duty = Double(l / floor)
+        if engine.isRunning {
+            engine.setFrequency(frequencyHz)
+            engine.setDuty(duty)
+        } else {
+            engine.start(frequencyHz: frequencyHz, duty: duty)
+        }
     }
 
     /// Read what the daemon reports (may be a fade target, not the LED —
@@ -88,51 +105,27 @@ public final class BacklightController {
         bridge.brightness(keyboardID)
     }
 
-    // MARK: - Hold lifecycle
-
-    private func beginHoldIfNeeded() {
-        guard !isHolding else { return }
-        if bridge.supportsAutoBrightnessControl {
-            savedAutoBrightness = bridge.isAutoBrightnessEnabled(keyboardID)
-            bridge.setAutoBrightness(false, keyboardID)
-        }
-        isHolding = true
-    }
-
-    private func releaseHoldIfNeeded() {
-        guard isHolding else { return }
-        dither.stop(finalLevel: nil)
-        if let saved = savedAutoBrightness {
-            bridge.setAutoBrightness(saved, keyboardID)
-        }
-        savedAutoBrightness = nil
-        isHolding = false
-    }
-
-    /// Pause the hold without touching auto-brightness bookkeeping —
-    /// used on system sleep so we stop issuing commands.
-    public func suspendHold() {
-        dither.stop(finalLevel: nil)
-    }
-
-    /// Reassert the current mode after wake. Callers pass the level they
-    /// want live again (the app keeps it in its own state).
-    public func resume(level: Float) {
-        setLevel(level)
-    }
-
     // MARK: - Safety
 
     /// The panic button: stop everything, hand control back to the system,
-    /// and land on a plainly visible level. Safe to call at any time from
-    /// any state, including a half-initialized one.
-    public func panicRestore(to level: Float = 0.3) {
-        dither.stop(finalLevel: nil)
-        if bridge.supportsAutoBrightnessControl {
-            bridge.setAutoBrightness(true, keyboardID)
-        }
-        bridge.setBrightness(level, keyboardID)
-        savedAutoBrightness = nil
-        isHolding = false
+    /// and land on a plainly visible level. Synchronous; safe to call at any
+    /// time from any thread and any state, including a half-initialized one.
+    @discardableResult
+    public func panicRestore(to level: Float = 0.3) -> Bool {
+        engine.restoreLevel = level
+        return engine.restoreNow(force: true)
+    }
+
+    /// Launch-time crash recovery (see DirtyFlag). Call once, before any
+    /// other backlight command.
+    @discardableResult
+    public func recoverFromCrashIfNeeded() -> DirtyFlag.Recovery {
+        engine.recoverFromCrashIfNeeded()
+    }
+
+    /// Arm crash recovery for a direct-write suppression the engine is not
+    /// driving (used by guided calibration). See DitherEngine.armCrashRecovery.
+    public func armCrashRecovery() {
+        engine.armCrashRecovery()
     }
 }
