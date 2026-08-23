@@ -32,6 +32,10 @@ jobs:
           xcodebuild -version
           swift --version 2>&1 | grep -qE 'Swift version 6' \
             || { echo "::error::expected a Swift 6 toolchain on this runner image"; exit 1; }
+      - name: Format
+        # Layout is machine-checkable, so it is checked by machine rather than
+        # argued about in review. Uses the toolchain's bundled formatter.
+        run: swift format lint --strict --recursive Sources Tests Package.swift
       - name: Build CLI
         run: swift build -c release --product sublight-cli
       - name: Build app

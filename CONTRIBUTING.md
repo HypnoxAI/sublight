@@ -103,6 +103,14 @@ one-variable-per-line, `forEach` rewriting, lowerCamelCase enforcement (`Solar`
 uses `M` and `Mrad` because that is what the astronomical literature calls them).
 Layout is the formatter's business; how the code is written is the author's.
 
+Adopting it took one tree-wide reformat, listed in `.git-blame-ignore-revs` so
+it does not bury the real authorship of every line. GitHub skips it in blame
+automatically; locally, run this once:
+
+```bash
+git config blame.ignoreRevsFile .git-blame-ignore-revs
+```
+
 Comments here carry more weight than usual. The codebase documents *why* —
 which alternative was tried, what the hardware actually did, why an obvious
 simplification is wrong — because most of its constraints are empirical and

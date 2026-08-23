@@ -1,0 +1,8 @@
+# Revisions that changed formatting only, and should be skipped when tracing
+# authorship. GitHub honours this file automatically; locally, run:
+#
+#     git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# Mechanical reformat: adopting .swift-format across the tree. No behaviour
+# changed — both products built and all tests passed identically either side.
+4ccdd815e388d4d4abd5737fc06446e2037bd7fd
