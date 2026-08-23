@@ -119,6 +119,12 @@ presets; no Accessibility permission needed.
 **Settings** (⌘, or the gear) holds launch-at-login, the shortcut, calibration,
 reset, the full safety text, and version info.
 
+### If the backlight gets stuck
+
+Press the keyboard brightness keys — the system takes control back immediately.
+Relaunching Sublight (or running `sublight-cli restore`) also auto-restores: a
+crash leaves a flag that the next launch heals before doing anything else.
+
 ## Calibrate — please actually do this
 
 The shipped defaults were measured on **one** MacBook Air. Two numbers vary:

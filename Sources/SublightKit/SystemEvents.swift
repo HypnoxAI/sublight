@@ -4,15 +4,19 @@
 //  SystemEvents.swift
 //  SublightKit
 //
-//  Sleep/wake handling. Two obligations:
-//    1. On sleep: stop issuing brightness commands (don't fight the
-//       power-down path, don't hold wakeful timers).
-//    2. On wake: wait a settle delay, then reassert — backlightd restores
-//       its own idea of brightness on wake, which will stomp a sub-minimum
-//       hold. The delay is empirical; 1.5 s is a conservative placeholder.
+//  Suspend/resume around sleep, display sleep, and session switches. Two
+//  obligations:
+//    1. On suspend: hand the backlight back to the system (a real restore,
+//       not merely cancelling the timers) — don't fight the power-down path,
+//       don't leave auto-brightness disabled for the next session, don't
+//       hold wakeful timers.
+//    2. On resume: wait a settle delay, then let the caller re-engage if the
+//       user had it enabled — backlightd restores its own idea of brightness
+//       on wake, which would stomp a sub-minimum hold. The delay is
+//       empirical; 1.5 s is a conservative placeholder.
 //
-//  Screen wake (display sleep without system sleep) gets the same
-//  treatment via screensDidWakeNotification.
+//  The caller models the decision (userEnabled && !systemSuspended) — see
+//  DimmingPolicy; this type only reports the transitions.
 //
 //  Licensed under the Apache License 2.0 — see LICENSE.
 //
@@ -21,42 +25,69 @@ import AppKit
 
 public final class SleepWakeObserver {
 
-    public var wakeSettleDelay: TimeInterval
+    public enum Transition: String {
+        case willSleep, screensDidSleep, sessionDidResignActive
+        case didWake, screensDidWake, sessionDidBecomeActive
+
+        public var isSuspend: Bool {
+            switch self {
+            case .willSleep, .screensDidSleep, .sessionDidResignActive: return true
+            case .didWake, .screensDidWake, .sessionDidBecomeActive: return false
+            }
+        }
+    }
+
+    public let wakeSettleDelay: TimeInterval
 
     private var tokens: [NSObjectProtocol] = []
+    /// The pending settle-delayed resume, if any. A suspend that arrives inside
+    /// the settle window cancels it — otherwise a stale resume would re-engage
+    /// the engine while the machine is on its way to sleep.
+    private var pendingResume: DispatchWorkItem?
 
+    /// Both callbacks are delivered on the main queue; `onResume` after
+    /// `wakeSettleDelay`.
     public init(
         wakeSettleDelay: TimeInterval = 1.5,
-        onSleep: @escaping () -> Void,
-        onWake: @escaping () -> Void
+        onSuspend: @escaping (Transition) -> Void,
+        onResume: @escaping (Transition) -> Void
     ) {
         self.wakeSettleDelay = wakeSettleDelay
         let center = NSWorkspace.shared.notificationCenter
         let delay = wakeSettleDelay
 
-        tokens.append(center.addObserver(
-            forName: NSWorkspace.willSleepNotification,
-            object: nil, queue: .main
-        ) { _ in
-            onSleep()
-        })
-
-        tokens.append(center.addObserver(
-            forName: NSWorkspace.didWakeNotification,
-            object: nil, queue: .main
-        ) { _ in
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { onWake() }
-        })
-
-        tokens.append(center.addObserver(
-            forName: NSWorkspace.screensDidWakeNotification,
-            object: nil, queue: .main
-        ) { _ in
-            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { onWake() }
-        })
+        let pairs: [(Notification.Name, Transition)] = [
+            (NSWorkspace.willSleepNotification, .willSleep),
+            (NSWorkspace.screensDidSleepNotification, .screensDidSleep),
+            (NSWorkspace.sessionDidResignActiveNotification, .sessionDidResignActive),
+            (NSWorkspace.didWakeNotification, .didWake),
+            (NSWorkspace.screensDidWakeNotification, .screensDidWake),
+            (NSWorkspace.sessionDidBecomeActiveNotification, .sessionDidBecomeActive),
+        ]
+        for (name, transition) in pairs {
+            tokens.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                guard let self else { return }
+                if transition.isSuspend {
+                    // Cancel any resume still waiting out its settle delay: the
+                    // machine is suspending again, so that resume is stale.
+                    self.pendingResume?.cancel()
+                    self.pendingResume = nil
+                    onSuspend(transition)
+                } else {
+                    self.pendingResume?.cancel()
+                    let work = DispatchWorkItem { [weak self] in
+                        self?.pendingResume = nil
+                        onResume(transition)
+                    }
+                    self.pendingResume = work
+                    DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+                }
+            })
+        }
     }
 
     deinit {
+        pendingResume?.cancel()
         let center = NSWorkspace.shared.notificationCenter
         tokens.forEach { center.removeObserver($0) }
     }
