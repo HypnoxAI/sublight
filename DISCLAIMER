@@ -2,11 +2,12 @@ SUBLIGHT — SAFETY & USE DISCLAIMER
 
 PHOTOSENSITIVE SEIZURE WARNING
 Sublight dims the keyboard below its normal minimum by rapidly modulating the
-backlight. The pulse modes flicker at frequencies (roughly 2-12 Hz) within the
-range that can trigger seizures in people with photosensitive epilepsy. A small
+backlight. EVERY mode flickers, at 3 to 8 Hz, within the range that can trigger
+seizures in people with photosensitive epilepsy; no mode is flicker-free, and
+that is a measured property of the hardware rather than a tuning choice. A small
 number of people may experience seizures when exposed to flickering light, even
-with no prior history. If you or anyone using this software has epilepsy or any
-history of photosensitivity, do not use the pulse modes. Stop immediately and
+with no prior history. If you or anyone who can see the keyboard has epilepsy or
+any history of photosensitivity, do not use this software. Stop immediately and
 consult a doctor if you experience dizziness, altered or blurred vision,
 disorientation, eye or muscle twitching, or any involuntary movement. Use in a
 well-lit room, keep brightness low, sit back from the keyboard, and take breaks.

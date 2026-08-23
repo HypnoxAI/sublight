@@ -17,10 +17,14 @@ Free and open source · Apache 2.0 · zero dependencies · zero network calls
 macOS clamps the keyboard backlight to a lowest step that is still too bright in
 a genuinely dark room. Sublight goes *below* it.
 
-It cannot do that with a static setting — the hardware refuses — so it dithers
-the backlight faster than the eye resolves. At the right speed this fuses into a
-**steady, dim, flicker-free glow**. Lower speeds read as a gentle visible pulse
-and are offered as an experimental extra.
+It cannot do that with a static setting — the hardware refuses — so it switches
+the backlight on and off a few times a second, and the average comes out below
+the floor. **This is visible flicker, at every setting.** macOS will not honour
+a dither cycle short enough to fuse, so a steady glow is not on the menu; the
+fastest, dimmest, steadiest mode is 8 Hz and you can still see it pulsing.
+That is measured, not estimated — see [`SAFETY.md`](SAFETY.md) before you
+install, and [`docs/COREBRIGHTNESS.md`](docs/COREBRIGHTNESS.md) for the
+evidence.
 
 <!-- SCREENSHOTS: replace these placeholders before publishing.
      1. menu bar + popover in Simple mode
@@ -96,9 +100,9 @@ Sublight takes over.
 **First launch** walks through a short onboarding: what the app does, the safety
 warning (with an acknowledgment you have to tick), and an offer to calibrate.
 
-**Simple mode** is one switch and a brightness slider. It runs at a fixed
-flicker-free frequency and never mentions Hz. This is the right mode if you just
-want dim keys.
+**Simple mode** is one switch and a brightness slider. It runs at the steadiest
+frequency for you — the one calibration measured, or 8 Hz until you calibrate —
+and never mentions Hz. This is the right mode if you just want dim keys.
 
 **Advanced mode** exposes the second axis: preset frequencies at **3 / 6 / 8 Hz**,
 a **2–8 Hz** custom slider, and a separate brightness slider. Frequency and
@@ -175,18 +179,8 @@ dither is still visible as flicker at the ceiling.
   neither read-back API can see it happen. Sublight refuses to run above the
   ceiling and logs any request it clamps, so you cannot land there by accident.
 
-  **Re-qualify after a macOS update.** The ceiling is a property of the daemon,
-  so an OS update can move it. Soak the current ceiling for five minutes and
-  watch the keys at roughly 0:30, 2:30 and 4:30:
-
-  ```bash
-  sublight-cli hold --freq 8 --duty 0.15 --seconds 300
-  ```
-
-  Any dark envelope at any glance means the boundary moved: find the lowest
-  frequency that fails, subtract 0.5 Hz, and that is the new
-  `DitherEngine.maxStableFrequencyHz`. Please file a **Hardware report** with
-  what you find.
+  The ceiling is a property of the daemon, so a macOS update can move it —
+  see [Re-qualifying after a macOS update](#re-qualifying-after-a-macos-update).
 
 - **The dither is still visible as flicker at the ceiling** on the reference
   machine. Fusing it into a steady glow would need a frequency the daemon will
@@ -195,19 +189,97 @@ dither is still visible as flicker at the ceiling.
 - **Yield-to-manual-control is parked**: the reference machine has no
   keyboard-brightness keys, so there is nothing to yield to. See SPEC §11.
 
-## How it works
+## How it works — and what could break
 
 The private API cannot set a static level below the floor — it accepts the value,
 reports success, and the driver clamps the actual light. The only way under is to
 alternate between the floor and off; the LED's physical response and your eye's
 partial fusion average that into a sub-floor brightness. The daemon refuses to act
-on cycles shorter than ~125 ms (so ~8 Hz is the hard ceiling, see Known
-limitations), and below ~3 Hz the pulsing is obtrusive, so the usable band is
-narrow.
+on cycles shorter than ~125 ms (so **8 Hz is a hard ceiling**), and below ~3 Hz the
+pulsing is obtrusive, so the usable band is narrow.
 
-The full account — including the reverse-engineering record, the dead ends, and
-why API read-backs turned out to be daemon bookkeeping rather than LED truth — is
-in [`docs/SPEC.md`](docs/SPEC.md).
+### What could break
+
+Sublight drives **private `CoreBrightness` interfaces**. They are undocumented,
+unsupported, and Apple owes them no stability. Nothing here was read from
+documentation — every signature, every clamp, and the 8 Hz ceiling itself was
+**verified empirically on macOS 26.6.1 (build 25G76), Mac16,12 (MacBook Air M4),
+on 2026-08-23**. Any macOS update can invalidate any of it.
+
+Two independent things can break, and they break differently:
+
+1. **The interface can change.** A renamed class, a removed selector, or an
+   argument whose type changed. The last one is the dangerous case: on arm64,
+   floats travel in different registers than integers, so a mistyped argument
+   does not fail — it silently misaligns every argument after it. So Sublight
+   runs a **capability probe at launch** that checks each selector it depends on
+   against the exact Objective-C type encoding it was verified against. On any
+   mismatch the app **disables itself and says why**, and the CLI exits 3
+   without touching the backlight. It refuses to guess.
+2. **The behaviour can change.** The daemon's cycle-period limit is a runtime
+   property, not an ABI one, so the probe cannot see it move. If the ceiling
+   drops, dimming at 8 Hz starts falling into multi-second dark envelopes. That
+   one needs eyes — see the re-qualification ritual below.
+
+### API compatibility
+
+Where the private interface has actually been verified. This is a different
+question from [Hardware compatibility](#hardware-compatibility) above, which
+records whether dimming *works* on a given Mac.
+
+| macOS build | Hardware | Verified | Status |
+|---|---|---|---|
+| 26.6.1 (25G76) | `Mac16,12` — MacBook Air 13" (M4) | 2026-08-23 | ✅ verified — all required selectors present with matching type encodings; 8 Hz ceiling confirmed by soak |
+
+If you run Sublight on anything else, `sublight-cli sig` prints the true type
+encodings on your machine and whether they match. Please add a row.
+
+### Re-qualifying after a macOS update
+
+The launch probe catches interface drift on its own. The **ceiling** it cannot
+see, so check it by hand — it takes five minutes and your eyes are the only
+instrument that works:
+
+```bash
+sublight-cli hold --freq 8 --duty 0.15 --seconds 300
+```
+
+Watch the keys at roughly **0:30**, **2:30** and **4:30**. You are looking for a
+*dark envelope*: the backlight dropping to complete darkness for a second or
+more and then returning, repeating every one to three seconds. Steady flicker is
+the expected, healthy result — the dither is supposed to be visible.
+
+**Any dark envelope at any glance means the ceiling no longer holds.** Find the
+lowest frequency that still fails, subtract 0.5 Hz, and that is the new value for
+`DitherEngine.maxStableFrequencyHz`. Please
+[file an issue](https://github.com/HypnoxAI/sublight/issues) with your macOS
+build, your Mac model, and what you saw.
+
+### Related projects
+
+Other people have driven the same framework, for different ends:
+
+- **[KBPulse](https://github.com/emorydunn/KBPulse)** — animates the keyboard
+  backlight through `CoreBrightness` (pulses, patterns), operating in the normal
+  brightness range.
+- **[pirate/mac-keyboard-brightness](https://github.com/pirate/mac-keyboard-brightness)**
+  — archived; reads and sets keyboard/display brightness on pre-2016 Macs
+  through the older IOKit path.
+- **[LightBoard](https://github.com/rcarmo/LightBoard)** — controls the
+  backlight by simulating the hardware brightness keys through a virtual HID
+  device.
+
+None of them go **below the system floor**. That is the one thing Sublight does:
+sub-floor output by duty-cycle dithering, held inside the cycle-period limit the
+backlight daemon enforces.
+
+### The full record
+
+The complete reverse-engineering account — methodology, every finding with its
+evidence, the dead ends, and why the read-back APIs turned out to be daemon
+bookkeeping rather than LED truth — is in
+[`docs/COREBRIGHTNESS.md`](docs/COREBRIGHTNESS.md). The design and its rationale
+are in [`docs/SPEC.md`](docs/SPEC.md).
 
 ## CLI reference
 

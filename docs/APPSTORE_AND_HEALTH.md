@@ -112,9 +112,14 @@ epidemiology: on the order of 1 in 4,000 people in the general population are
 photosensitive; it's more common among people with epilepsy; and — importantly
 — many people don't know they're photosensitive until a first event.
 
-Sublight's pulse modes (Low 5 Hz, Medium 6 Hz) sit squarely in this band. The
-"smooth" High mode (10 Hz) is also modulating, though it fuses perceptually
-into a steadier glow.
+**Every Sublight mode sits squarely in this band** — Low 3 Hz, Medium 6 Hz,
+High 8 Hz — and **none of them is flicker-free**. That is measured, not
+estimated: the backlight daemon will not honour a dither cycle shorter than
+~125 ms, so fusing the flicker is unreachable at any setting the app can offer,
+and an observer watching the highest, steadiest mode still reports clear
+flicker. Earlier drafts of this document described High as "fusing perceptually
+into a steadier glow"; that claim is retracted — see
+[`COREBRIGHTNESS.md`](COREBRIGHTNESS.md).
 
 **Why the real-world risk here is low (but not zero):** seizure risk scales
 strongly with how much of the visual field the stimulus fills, its luminance,
@@ -143,10 +148,11 @@ the software.
   small studies, high individual variability, frequent commercial funding,
   publication bias. The tidy theta/alpha/beta → mental-state mapping is the
   framing of the brainwave-entrainment *industry*, not settled science.
-- **Compounding it on this hardware:** only ~5–10 Hz flicker is even producible
-  here (above ~10 Hz the backlight daemon coalesces the signal into steady
-  light), so the "alpha/beta" bands people associate with alertness aren't
-  reachable at all. The feature is, physically, a low-band novelty.
+- **Compounding it on this hardware:** only 3–8 Hz flicker is even producible
+  here (above 8 Hz the backlight daemon stops honouring the dither and the keys
+  fall dark for seconds at a time), so the "alpha/beta" bands people associate
+  with alertness aren't reachable at all. The feature is, physically, a
+  low-band novelty.
 
 **The safe and honest position is to make no efficacy claim.** The app already
 says "effects unproven," which is correct and should stay.
@@ -215,11 +221,15 @@ to be honest and protective, not to launder a claim.
 If you distribute the pulse feature to anyone but yourself, these lower risk
 and demonstrate reasonable care:
 
-1. **First-run acknowledgment.** Require the user to read and dismiss the
-   seizure warning **before** the pulse modes can be enabled the first time
-   (a one-time checkbox/dialog). The steady dimming can be available without it.
-2. **Default to the steady mode.** Ship defaulting to High (~10 Hz, fuses to
-   steady) — never auto-select a visible-pulse mode.
+1. **First-run acknowledgment.** *(Done.)* A modal states what the flicker is
+   and asks for confirmation **before any backlight command is issued**, the
+   first time dimming is enabled by any route. Declining records nothing.
+   Note the original form of this recommendation — "the steady dimming can be
+   available without it" — no longer applies: there is no steady mode, so the
+   gate covers all dimming, not only the pulse presets.
+2. **Default to the steadiest mode.** Ship defaulting to High (8 Hz, dimmest
+   and steadiest available) — never auto-select a lower, more obtrusive
+   frequency. Note this is *steadiest*, not *steady*: nothing fuses.
 3. **Never auto-start on launch.** *(Already done — the app launches Off and
    touches nothing until the user picks a mode.)*
 4. **Keep brightness capped sub-floor and low.** *(Already done — the slider

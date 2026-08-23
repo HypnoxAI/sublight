@@ -384,7 +384,7 @@ final class AppState: ObservableObject {
     }
 
     /// The frequency actually in use: the custom value in Advanced mode, the
-    /// calibrated flicker-free value in Simple mode, or the shipped default.
+    /// calibrated steadiest value in Simple mode, or the shipped default.
     var effectiveFrequency: Double {
         advancedMode ? frequencyHz : (calibratedFrequency ?? Self.simpleFreq)
     }

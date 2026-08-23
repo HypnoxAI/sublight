@@ -232,7 +232,7 @@ final class CalibrationController: ObservableObject {
         round += 1
         if round >= Self.rounds {
             measuredFrequency = (freqHi * 2).rounded() / 2
-            Log.calibration.info("flicker-free at: \(self.measuredFrequency ?? 0, privacy: .public) Hz")
+            Log.calibration.info("steadiest at: \(self.measuredFrequency ?? 0, privacy: .public) Hz")
             round = 0
             step = .level
             applyPreview()

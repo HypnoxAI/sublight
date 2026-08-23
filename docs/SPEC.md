@@ -23,9 +23,19 @@ dependencies.
 
 **Outcome, stated up front:** the goal is achievable, but *only* by dithering
 (pulsing) the backlight — there is no static sub-floor level on this hardware.
-The cleanest result is a ~10 Hz dither that fuses into a steady, dim,
-flicker-free glow. Lower frequencies (5–6 Hz) read as a gentle visible pulse
-and are exposed as an experimental novelty with important caveats (§7).
+**No setting is flicker-free.** The backlight daemon refuses to act on a dither
+cycle shorter than ~125 ms, so 8 Hz is a hard ceiling, and fusing the flicker
+would need a faster cycle than that. Every mode Sublight can offer — 3, 6 and
+8 Hz — is visible flicker, and it is exposed with the caveats in §7 and in
+[`../SAFETY.md`](../SAFETY.md).
+
+> **Revised 2026-08-23.** An earlier version of this document claimed ~10 Hz
+> "fuses into a steady, dim, flicker-free glow". That claim did not survive
+> instrumented measurement: 10 Hz is well above the daemon's period limit,
+> where the dither stops being honoured. The measured account — with the full
+> boundary table and the evidence for every finding — is in
+> [`COREBRIGHTNESS.md`](COREBRIGHTNESS.md). Passages below that still describe
+> the old model are marked.
 
 ## 2. Independence and open-source posture
 
@@ -77,11 +87,19 @@ instant jump to 0; there is no gradual daemon-side fade of the *commanded*
 value. (The v0.1 plan assumed one and intended to ride it. That plan was
 wrong.) Note this does not mean the *LED* changes instantly — see §5.
 
-**C. Rapid commands are coalesced.** Hammering `setBrightness` floor↔0 as fast
-as possible, and pacing it at 60–240 Hz, produces *no* LED modulation: the
-light holds steady at the floor. Commands arriving faster than roughly every
-~100 ms are collapsed by the daemon before they reach the hardware. This
-closes the door on classic high-frequency (flicker-fusion) dithering.
+**C. There is a cycle-period limit.** Hammering `setBrightness` floor↔0 as
+fast as possible, and pacing it at 60–240 Hz, produces *no* LED modulation: the
+light holds steady at the floor. This closes the door on classic
+high-frequency (flicker-fusion) dithering.
+
+The limit was later measured precisely, and it is **not** a rate limit. It is a
+limit on how short a *cycle* the daemon will act on: **125.0 ms holds, 117.6 ms
+fails**. Doubling the commands per second while leaving the period alone
+changes nothing — verified with padding writes that deliberately cross a 1/16
+output step, so no de-duplication can be discarding them. Above the limit the
+keys fall to complete darkness for a second or more at a time, recurring every
+one to three seconds. See [`COREBRIGHTNESS.md`](COREBRIGHTNESS.md) §4 for the
+full boundary table.
 
 The one thing definitively unavailable is direct PWM register access from
 userspace, which would need a DriverKit extension with entitlements Apple
@@ -158,28 +176,30 @@ Two walls squeeze the usable frequency range from both sides:
 
 - **Below ~5 Hz:** the LED fully completes each swing, so you see distinct
   pulses (visible flicker), though the average is dim.
-- **Above ~10 Hz:** the daemon's coalescing (§3-C) starts dropping commands,
-  and past that the LED simply holds at the floor (steady, but *not* dim).
+- **Above 8 Hz:** the daemon stops honouring the dither (§3-C). The keys fall
+  to complete darkness for a second or more at a time, recurring every one to
+  three seconds — not a steady light, and not a dim one.
 
-The sweet spot sits in between. Empirically on this machine:
+The usable band sits in between. Measured on this machine (see
+[`COREBRIGHTNESS.md`](COREBRIGHTNESS.md) §4 for every run):
 
 | Frequency | Observed result |
 |---|---|
-| 2–5 Hz | clear visible pulsing; dim on average |
-| ~6 Hz | gentle pulse, dim; peripherally tolerable |
-| ~8–10 Hz | **fuses into a steady, dim, flicker-free glow** |
+| 2–3 Hz | clear, obtrusive pulsing; dim on average |
+| ~6 Hz | steady visible flicker, dim; peripherally tolerable |
+| 7–8 Hz | steady visible flicker, dimmest; **holds a five-minute soak** |
+| ≥ 8.5 Hz | **dark envelopes** — the daemon has stopped honouring the dither |
 
-The ~10 Hz result is the prize: a light that is genuinely below the floor
-(so the dither is reaching the LED) *and* reads as steady (so the physical
-smoothing + eye fusion are winning over the residual flicker). It is the
-closest thing to "clean sub-floor dimming" this hardware allows. This band is
-narrow and its upper edge is close to where coalescing kills the effect
-entirely; it is not tunable much beyond ~5–10 Hz.
+**There is no flicker-free result.** An observer watching a 7.0 Hz and an
+8.0 Hz dither reports clear flicker at both. Fusing it would require a shorter
+cycle than the daemon will accept, so it is not reachable at any setting. What
+8 Hz buys is *dimmest and steadiest*, not *invisible*. The ceiling ships at
+**8.0 Hz**: 0.5 Hz of margin below the lowest frequency ever observed to fail.
 
 ### 5.3 Implementation
 
 `DitherEngine` runs one `DispatchSourceTimer` (`.strict`, ~1 ms leeway, on a
-dedicated `userInteractive` queue), alternating the two targets. At 5–10 Hz
+dedicated `userInteractive` queue), alternating the two targets. At 3–8 Hz
 (100–200 ms periods) a timer is more than accurate enough and does not spin the
 CPU. The perceived level is set by the **duty** — the fraction of each period
 spent at the floor; the first-order model is `L ≈ duty × floor`. The engine is
@@ -242,14 +262,14 @@ dither leaves the backlight off until `restore` is run or a brightness key is
 pressed; documented, and harmless.
 
 **Photosensitivity (central for the pulse feature).** The usable dither band
-(§5.2) is 5–10 Hz, and the sub-floor *pulse* modes (5–6 Hz) sit squarely in the
+(§5.2) is 3–8 Hz, and the sub-floor *pulse* modes (5–6 Hz) sit squarely in the
 3–30 Hz photosensitive-epilepsy trigger range (peak risk ~15–20 Hz). What
 keeps real risk low here is that the stimulus is a small, dim light in lower
 peripheral vision — seizure risk scales hard with visual-field coverage,
 luminance, and contrast, and a dim keyboard is a sliver of the field at low
 brightness. Two rules follow and are enforced in the UI/CLI: keep it dim
 (brightness is capped sub-floor; don't crank it for a "stronger" effect), and
-the photosensitivity warning travels with the feature. The ~10 Hz mode reads
+the photosensitivity warning travels with the feature. The 8 Hz mode reads
 as steady and is the recommended everyday mode; 5–6 Hz pulse is opt-in novelty.
 
 **Efficacy honesty.** The "pulse mode" is framed as experimental with no health
@@ -258,7 +278,7 @@ response (SSVEP / photic driving), but the popular mapping of theta/alpha/beta
 flicker to drowsiness/relaxation/cognition is weakly evidenced — small,
 often commercially-funded studies with high individual variability. The UI
 says "effects unproven" and means it. (It also cannot reach the alpha/beta
-bands anyway: >~10 Hz coalesces, so only theta/low-alpha flicker is even
+bands anyway: >8 Hz stops being honoured, so only theta/low-alpha flicker is even
 producible here.)
 
 ## 8. Architecture
@@ -299,9 +319,9 @@ also the brightest). A single scale cannot express both without making "High"
 ambiguous.
 
 - **Simple** shows one axis: an on/off toggle and a brightness slider, running
-  at a fixed frequency (the calibrated flicker-free value, or 9 Hz until
+  at a fixed frequency (the calibrated steadiest value, or 8 Hz until
   calibration has run). Frequency is never mentioned.
-- **Advanced** shows both: preset chips at **3 / 6 / 9 Hz**, a **2–12 Hz**
+- **Advanced** shows both: preset chips at **3 / 6 / 8 Hz**, a **2–8 Hz**
   custom slider, and a *separate* brightness slider — two independent knobs, so
   the inverse coupling becomes a starting point to adjust rather than a trap.
 
@@ -320,8 +340,9 @@ this order (which also serves as the per-macOS-release smoke test):
    read-backs are bookkeeping** (§3-A).
 4. `probe --ramp` — **no software fade to ride** (§3-B).
 5. `dither-test` (fast band) — **60–240 Hz coalesces to nothing** (§3-C).
-6. `dither-test --slow` / `--fine` (A/B vs floor) — **map the 5–10 Hz band;
-   ~10 Hz fuses to steady dim** (§5.2).
+6. `dither-test --slow` / `--fine` (A/B vs floor) — **map the 3–8 Hz band**
+   (§5.2). *(Historical note: this step originally recorded "~10 Hz fuses to
+   steady dim". It does not — see [`COREBRIGHTNESS.md`](COREBRIGHTNESS.md).)*
 7. `pulse low|medium|high` — the three presets, continuous.
 8. The app — the presets as a menu-bar feature.
 
@@ -336,8 +357,8 @@ have never seen, because **two of the numbers this app depends on are not
 universal**:
 
 - the **floor** is a property of the machine (where its driver clamps), and
-- the **flicker-free frequency** is a property of the *person* — flicker fusion
-  varies between individuals, so 9 Hz reading as steady here says nothing about
+- the **steadiest usable frequency** is partly a property of the *person* —
+  flicker fusion varies between individuals, so 8 Hz reading as tolerable here says nothing about
   anyone else's eyes.
 
 Three steps, in `CalibrationController`:
@@ -375,7 +396,7 @@ Three steps, in `CalibrationController`:
    brighter step, which is what the redesigned test is there to prevent.
 2. **Flicker-free frequency — bisection on "steady or pulsing?"** Five rounds
    over `2…11 Hz` at duty 0.5. The ceiling is 11 rather than 12 on purpose:
-   past ~10 Hz the daemon coalesces (§3-C) and the light holds steady *because
+   past 8 Hz the daemon stops honouring the dither (§3-C) and the light fails *because
    it has stopped dithering*, which is "steady" for the wrong reason and no
    longer sub-floor. A result at the ceiling is flagged in the summary rather
    than silently returned as a good number.
@@ -405,7 +426,7 @@ distribution is source: `git clone && swift build`.
 ## 11. Roadmap
 
 **Done (v0.3):** the mechanism is characterized; sub-floor dimming works;
-hybrid Simple/Advanced UI with 3/6/9 Hz presets and a 2–12 Hz custom slider;
+hybrid Simple/Advanced UI with 3/6/8 Hz presets and a 2–8 Hz custom slider;
 per-machine guided calibration (§9.1); manual time-of-day scheduling;
 launch-at-login (`SMAppService`); a dependency-free global hotkey (Carbon
 `RegisterEventHotKey`); first-run onboarding with the safety gate; a menu-bar
@@ -445,9 +466,9 @@ The v0.1 open-questions table is now a findings record.
 | 2 | Are sub-floor values honored by a plain set? | **No** — clamped at the floor (confirmed by eye, auto off) |
 | 3 | Is there a software fade ramp to ride? | **No** — commanded value jumps; only the *physical* LED response smooths |
 | 4 | Read-back: LED truth or bookkeeping? | **Bookkeeping** — both read-backs echo/rescale the command; neither tracks the LED |
-| 5 | Does the daemon rate-limit rapid commands? | **Yes** — coalesces above ~10 Hz; 60–240 Hz produces no modulation |
+| 5 | Does the daemon rate-limit rapid commands? | **No — it limits the CYCLE PERIOD.** 125.0 ms holds, 117.6 ms fails; doubling writes/s at a fixed period changes nothing. 60–240 Hz produces no modulation |
 | 6 | Does the `fadeSpeed:commit:` setter reach sub-floor? | **No** — clamps like the plain setter; `fadeSpeed` is an int enum (verified via `sig`) |
-| 7 | Is there a usable dither band? | **Yes, ~5–10 Hz.** 5–6 Hz = visible pulse; ~10 Hz = steady dim (the win) |
+| 7 | Is there a usable dither band? | **Yes, 3–8 Hz** — all of it visibly flickering. 8 Hz is dimmest and steadiest; nothing fuses |
 | 8 | Selector/type drift risk on future macOS | Standing — `dump`/`sig` are the tripwire; re-run per release |
 | 9 | Photosensitivity | Real caveat; low personal risk (small/dim/peripheral); warning + dim caps enforced |
 | 10 | Apple removes `KeyboardBrightnessClient` | Standing — bridge fails cleanly; project pauses until a new surface is found |

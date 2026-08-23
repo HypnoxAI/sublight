@@ -46,7 +46,7 @@
 //  ERR-DARK, AND WHY IT IS COUNTED. `highEdge` refuses to command ON when this
 //  cycle's OFF deadline has already passed — see the comment at the check. The
 //  threshold is not a constant: it IS the ON window, duty × period, so it
-//  shrinks as the slider goes down (16.7 ms at 9 Hz / duty 0.15). A skip makes
+//  shrinks as the slider goes down (18.75 ms at 8 Hz / duty 0.15). A skip makes
 //  a whole cycle dark, and consecutive skips make a dark ENVELOPE. Every skip
 //  is therefore counted, timed against its own threshold, and its run length
 //  tracked, so "the light went out for half a second" can be attributed to

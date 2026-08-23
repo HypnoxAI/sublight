@@ -285,8 +285,9 @@ public final class KeyboardBrightnessBridge {
     /// observed before the first command of an unrelated run. So the getter
     /// intermittently serves a persistent system-side setting rather than the
     /// live level. It is also expensive: p50 0.6 ms against 0.15 ms for a
-    /// setter, with a 21 ms outlier — longer than the ON window at 9 Hz /
-    /// duty 0.15, so polling it on the engine queue can stall an edge.
+    /// setter, with a 21 ms outlier — longer than the ON window at the ceiling
+    /// (18.75 ms at 8 Hz / duty 0.15), so polling it on the engine queue can
+    /// stall an edge.
     public func brightness(_ keyboardID: UInt64) -> Float? {
         EngineQueue.run {
             guard responds("brightnessForKeyboard:") else { return nil }

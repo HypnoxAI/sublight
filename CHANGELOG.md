@@ -22,11 +22,33 @@ stability on.
   automation that fires unattended does not get to be the first thing that
   turns dimming on. The CLI does not block (it is a research harness) but every
   mutating command points at `SAFETY.md` on stderr until the marker exists.
+- **`docs/COREBRIGHTNESS.md`** — the research record. Methodology (runtime
+  lookup, the `dump`/`sig` harness, command-truth instrumentation, and the
+  human-in-the-loop visual protocol, with the reason it has to exist), then
+  every finding with the evidence under it: `fadeSpeed`'s true type and the
+  arm64 register-misalignment trap behind it, the hardware clamp, both
+  read-backs being blind to the LED, the period limit with its full boundary
+  table, `fadeSpeed` being visually inert, and the err-dark skip statistics. It
+  also flags one claim as an open hypothesis rather than quietly dropping it.
 - **`SAFETY.md`**, linked from the README's warning section and again directly
   above the install instructions: what the flicker mechanically is, who should
   not use it — including anyone who can merely *see* the keyboard — the stop
   conditions, how to recover a stuck backlight, and why a read-back value is
   not evidence and your eyes are.
+
+### Changed
+- **The docs no longer claim a flicker-free mode, because there isn't one.**
+  `SPEC.md`, `ROADMAP.md` and `APPSTORE_AND_HEALTH.md` described ~10 Hz as
+  fusing into a steady, dim, flicker-free glow and framed the limit as command
+  coalescing. Measurement contradicts both: the limit is on the cycle *period*,
+  and 10 Hz is above it. Those documents now carry the measured story and a
+  dated note saying what was retracted and why — the old claims are marked, not
+  erased. The README's own opening paragraph said the same thing and now says
+  the true one. A new "How it works — and what could break" section records
+  which macOS build and hardware the private interface was verified against,
+  how the launch probe self-disables on drift, the five-minute ritual for
+  re-qualifying the ceiling after an update, and what related projects do and
+  do not do.
 
 ### Fixed
 - **High mode's long-standing irregularity was never the engine — it was a
