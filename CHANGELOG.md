@@ -11,6 +11,14 @@ stability on.
 ## [Unreleased]
 
 ### Changed
+- **The 60 s suppression keeper is retained, and its provisional status is
+  resolved.** It carried a deletion criterion: remove it if no "flag flipped
+  mid-run" warning is ever observed. Checked against a full day of unified-log
+  data — **33 such warnings, across three sessions, every one of them
+  auto-brightness having come back on**, nine caught by the very next tick
+  after a re-assertion. A one-shot assertion at start is demonstrably not
+  sufficient; the timer is load-bearing, not insurance. Recorded as a finding
+  in `docs/COREBRIGHTNESS.md`.
 - **Builds in Swift 6 language mode with complete concurrency checking**, on
   every target. No behaviour changed; the compiler now refuses several things
   that were previously only conventions. `StatusGlyph` is `@MainActor` (it

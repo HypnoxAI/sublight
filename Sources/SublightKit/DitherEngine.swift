@@ -603,9 +603,28 @@ public final class DitherEngine {
     /// to be scheduled relative to now. Getters exist for both flags on the
     /// reference build, so it reads before writing and logs any flip.
     ///
-    /// DELETION CRITERION (Tier-4 pass): if no "flag flipped mid-run" line is
-    /// observed over extended use, the keeper is removed — the one-shot
-    /// assertion on start/resume is then proven sufficient.
+    /// RETAINED — the deletion criterion was tested and FAILED, decisively.
+    ///
+    /// The criterion was: if no "flag flipped mid-run" line is ever observed,
+    /// delete the keeper, because the one-shot assertion on start and resume
+    /// would then be proven sufficient. Checked against the unified log over a
+    /// full day of use (2026-08-23): **33 mid-run flip warnings**, across three
+    /// separate app sessions. In every one, `autoBrightnessOn` had come back
+    /// TRUE — something in the system re-enables keyboard auto-brightness
+    /// while the dither is running. Nine of the thirty-three were caught by the
+    /// very next 60 s tick after a re-assertion, so the flip can recur within a
+    /// minute of being corrected.
+    ///
+    /// The read-before-write is sighted, not blind: both
+    /// `isAutoBrightnessEnabledForKeyboard:` and
+    /// `isIdleDimmingSuspendedOnKeyboard:` are present on the reference
+    /// machine, so those warnings reflect an actual observed state, not a
+    /// blind re-assert.
+    ///
+    /// Without this timer the ambient light sensor would take the backlight
+    /// back mid-hold and the sub-floor dither would be silently stomped —
+    /// which is exactly the class of intermittent, hard-to-attribute fault the
+    /// rest of this file exists to prevent. It stays.
     private func startKeeper() {
         stopKeeper()
         let k = DispatchSource.makeTimerSource(queue: queue)

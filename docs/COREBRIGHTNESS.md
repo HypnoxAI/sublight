@@ -265,7 +265,32 @@ The dark envelopes happened while commands were arriving on schedule, in order,
 and being accepted. Whatever the daemon is doing with them, it is doing after
 `setBrightness:forKeyboard:` returns `true`.
 
-### 5. `fadeSpeed` is visually inert at these timescales
+### 5. The suppression flags flip back on their own, mid-run
+
+Sublight turns keyboard auto-brightness **off** and suspends idle dimming
+before it starts dithering, because either one would otherwise move the
+backlight out from under the hold. Those are not fire-and-forget: **something
+in the system turns auto-brightness back on while the dither is running.**
+
+*Evidence:* the engine re-reads both flags every 60 seconds and logs a warning
+when it finds one flipped. Across a full day of use (2026-08-23) the unified
+log contains **33 such warnings**, in three separate app sessions. In every one,
+`autoBrightnessOn` had returned to `true`. Nine were caught by the very next
+tick after a re-assertion, so the flip can recur within a minute of being
+corrected.
+
+The read is sighted rather than blind — both
+`isAutoBrightnessEnabledForKeyboard:` and `isIdleDimmingSuspendedOnKeyboard:`
+exist on this machine — so these are observed states, not defensive
+re-asserts.
+
+What triggers the re-enable is not established. It is not correlated with
+Sublight's own writes (the engine never touches auto-brightness except at
+start, resume, and this keeper). The practical consequence is settled either
+way: **a one-shot assertion at start is not sufficient**, and the periodic
+re-assertion is load-bearing rather than belt-and-braces.
+
+### 6. `fadeSpeed` is visually inert at these timescales
 
 Every value tested — **0, 1, 4, 16, 100** — was accepted (`ok=true`). At a fixed
 16 ms ON window with 400 ms of settle between pairs, the three variants
@@ -276,7 +301,7 @@ So `fadeSpeed` is not a lever for this problem. It cannot be used to sharpen the
 dither's edges, and it is not the cause of the period limit. The engine uses the
 plain setter.
 
-### 6. Err-dark skips: 5 in 9,270, and invisible
+### 7. Err-dark skips: 5 in 9,270, and invisible
 
 The engine refuses to command ON at an edge that has run later than its own ON
 window (`duty × period`), because lighting the keys past the point they should
