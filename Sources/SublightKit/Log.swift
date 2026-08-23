@@ -11,6 +11,12 @@
 //
 //      log show --predicate 'subsystem == "com.hypnox.sublight"' --last 30m
 //
+//  or live, with the engine's info-level events (start/stop/restore/
+//  dirty-flag/suspend/resume) and the per-edge signposts:
+//
+//      log stream --predicate 'subsystem == "com.hypnox.sublight"' --info
+//      log show --signpost --predicate 'subsystem == "com.hypnox.sublight" AND category == "engine"' --last 2m
+//
 //  Nothing here is ever sent anywhere — the unified log is local to the
 //  machine, and Sublight makes no network calls at all.
 //
@@ -21,7 +27,9 @@ import Foundation
 import os
 
 public enum Log {
-    private static let subsystem = "com.hypnox.sublight"
+    /// The app's bundle identifier (CFBundleIdentifier in scripts/Info.plist).
+    /// The CLI has no bundle, so the literal is the source of truth for both.
+    public static let subsystem = "com.hypnox.sublight"
 
     /// Private-API bridge: framework loading, selector resolution.
     public static let bridge = Logger(subsystem: subsystem, category: "bridge")
@@ -31,4 +39,6 @@ public enum Log {
     public static let lifecycle = Logger(subsystem: subsystem, category: "lifecycle")
     /// Guided calibration.
     public static let calibration = Logger(subsystem: subsystem, category: "calibration")
+    /// Launch-time private-API capability probe.
+    public static let probe = Logger(subsystem: subsystem, category: "probe")
 }

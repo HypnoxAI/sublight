@@ -34,6 +34,21 @@ Certificate of Origin 1.1, reproduced below.
    changed it (Apache 2.0 §4(b)).
 4. Sign off every commit (`-s`) and open a pull request.
 
+## Observing the engine
+
+Everything the engine does is in the unified log under the app's bundle
+identifier — start/stop/restore, the dirty flag, suspend/resume, the launch
+probe (category `probe`), and one signpost per dither edge (`ON` / `OFF`,
+category `engine`):
+
+```bash
+log stream --predicate 'subsystem == "com.hypnox.sublight"' --info
+log show --signpost --predicate 'subsystem == "com.hypnox.sublight" AND category == "engine"' --last 2m
+```
+
+The signpost timestamps are how timing regressions are measured: ON-to-ON
+spacing is the period, OFF offset from its ON edge is the duty.
+
 ## Scope reminders
 
 Sublight is intentionally narrow: Apple Silicon MacBooks with a backlit
