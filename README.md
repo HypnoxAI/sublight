@@ -34,11 +34,14 @@ and are offered as an experimental extra.
 
 ## ⚠️ Read this first
 
-- **Photosensitivity.** Sublight dims by flickering the backlight, in the
-  2–8 Hz range — which can trigger seizures in people with photosensitive
-  epilepsy. The light is small, dim, and in peripheral vision, so the risk is
-  low, but **if you have any history of photosensitivity or epilepsy, do not use
-  this app.** See [`DISCLAIMER`](DISCLAIMER).
+- **Photosensitivity — [read `SAFETY.md`](SAFETY.md) before installing.**
+  Sublight dims by flickering the backlight between 3 and 8 Hz, inside the
+  3–30 Hz photosensitive band, which can trigger seizures in people with
+  photosensitive epilepsy. **No mode is flicker-free** — that is measured, not
+  estimated: fusing the flicker would need a faster cycle than the macOS
+  backlight daemon will accept. **If you or anyone who can see your keyboard
+  has any history of photosensitivity or epilepsy, do not use this app.** See
+  also [`DISCLAIMER`](DISCLAIMER).
 - **Effects are unproven.** Flickering light produces a measurable response in
   the visual cortex, but there is no reliable evidence it improves mood, focus,
   or sleep, and Sublight claims none. It is not a medical device.
@@ -59,6 +62,11 @@ and are offered as an experimental extra.
 - Xcode Command Line Tools (`xcode-select --install`)
 
 ## Install
+
+> **Before you install: [read `SAFETY.md`](SAFETY.md).** Sublight's only
+> mechanism is flicker in the 3–8 Hz range, no mode is flicker-free, and that
+> matters for anyone who can see your keyboard — not only for you. The app asks
+> you to confirm you have read it the first time you enable dimming.
 
 No signed release yet, so build from source:
 

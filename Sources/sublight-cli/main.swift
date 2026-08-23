@@ -105,6 +105,9 @@ func printUsage() {
           Only `help`, `sig`, and `dump` run without the probe, so the drift can
           be inspected.
 
+    SAFETY: every mode flickers the backlight in the 3-30 Hz photosensitive band.
+    Read SAFETY.md before using this on anyone but yourself.
+
     All numbers are normalized 0..1. Start with `dump`, then `sig`, then `probe`.
     Every long-running command restores the backlight on Ctrl-C, SIGTERM, and SIGHUP;
     a crash leaves a dirty flag that the next launch of the app or CLI heals.
@@ -535,6 +538,19 @@ if !["help", "--help", "-h", "sig", "signatures", "dump"].contains(command) {
         exit(3)
     }
     apiVerified = true
+}
+
+/// Commands that COMMAND the backlight. The CLI is a research harness and does
+/// not block on consent the way the app does — someone running it has already
+/// chosen to drive a private API by hand. But it will not do so silently:
+/// until the app has recorded consent in the shared marker, every mutating
+/// command says once, on stderr, what this thing actually does.
+let mutatingCommands: Set<String> = [
+    "set", "auto", "probe", "dither-test", "hold", "pulse", "pair-sweep",
+    "notify-probe", "restore",
+]
+if mutatingCommands.contains(command), !ConsentMarker().isGranted {
+    fputs("notice: Sublight dims by flickering the backlight at 3-8 Hz; every mode is visible flicker and can trigger seizures in people with photosensitive epilepsy. Read SAFETY.md before continuing.\n", stderr)
 }
 
 switch command {

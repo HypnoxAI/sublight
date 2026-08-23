@@ -78,6 +78,9 @@ final class AppState: ObservableObject {
     @Published private(set) var engineState: EngineState = .stopped
     @Published var advancedMode: Bool = false { didSet { onAdvancedChanged() } }
     @Published var acknowledged: Bool = false
+    /// Mirror of the shared consent marker (see ConsentMarker). Nothing may
+    /// command the backlight until this is true.
+    @Published private(set) var consentGranted: Bool = false
     @Published var launchAtLogin: Bool = false { didSet { updateLoginItem() } }
     @Published var hotKey: HotKeyChoice = .off { didSet { applyHotKey() } }
     /// Set when a shortcut could not be claimed — almost always because
@@ -157,6 +160,7 @@ final class AppState: ObservableObject {
     init() {
         advancedMode = defaults.bool(forKey: Keys.advanced)
         acknowledged = defaults.bool(forKey: Keys.ack)
+        consentGranted = consent.isGranted
         launchAtLogin = (SMAppService.mainApp.status == .enabled)
         scheduleEnabled = defaults.bool(forKey: Keys.schedEnabled)
         if let m = defaults.object(forKey: Keys.schedStart) as? Int { scheduleStartMinutes = m }
@@ -317,7 +321,67 @@ final class AppState: ObservableObject {
         return s
     }
 
-    func setPreset(_ hz: Double) { frequencyHz = hz }
+    // MARK: Consent
+
+    /// Shared with the CLI, beside the dirty flag. See ConsentMarker.
+    private let consent = ConsentMarker()
+
+    /// The consent copy, verbatim. Changing a word here means bumping
+    /// `ConsentMarker.currentVersion` so everyone is asked again.
+    static let consentBody = """
+        Sublight dims your keyboard backlight below the system minimum by \
+        switching it on and off several times per second (3-8 Hz). Every mode \
+        produces visible flicker in the 3-30 Hz range. Flashing light in this \
+        range can trigger seizures in people with photosensitive epilepsy.
+
+        Do not enable Sublight if you - or anyone who can see your keyboard - \
+        has photosensitive epilepsy or is sensitive to flashing light. Stop \
+        immediately if you notice discomfort, dizziness, nausea, eye strain, \
+        or any unusual visual sensation.
+
+        If the backlight ever appears stuck after a crash, press the keyboard \
+        brightness keys or relaunch Sublight.
+        """
+
+    /// Ask once, before anything is commanded. Returns whether dimming may
+    /// proceed. Declining records nothing and changes nothing — the point is
+    /// that a decline is indistinguishable from never having asked.
+    ///
+    /// AppKit rather than a SwiftUI `.alert`: the popover this is triggered
+    /// from is a MenuBarExtra window that dismisses when it loses focus, and
+    /// an alert hosted inside it would go with it.
+    private func requestConsentIfNeeded() -> Bool {
+        if consentGranted { return true }
+        let alert = NSAlert()
+        alert.messageText = "Before you enable Sublight"
+        alert.informativeText = Self.consentBody
+        alert.alertStyle = .warning
+        // First button added is the default (rightmost, Return-activated), so
+        // the safe answer is the one you get by reflex.
+        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: "I Understand - Enable")
+        NSApp.activate(ignoringOtherApps: true)
+        guard alert.runModal() == .alertSecondButtonReturn else {
+            Log.lifecycle.notice("consent declined — dimming not enabled, nothing commanded")
+            return false
+        }
+        consent.record()
+        consentGranted = consent.isGranted
+        return consentGranted
+    }
+
+    /// THE enable path. Every route that turns dimming on for a person present
+    /// at the machine goes through here so the gate cannot be walked around.
+    func setEnabled(_ on: Bool) {
+        guard on else { isEnabled = false; return }
+        guard requestConsentIfNeeded() else { return }
+        isEnabled = true
+    }
+
+    func setPreset(_ hz: Double) {
+        guard requestConsentIfNeeded() else { return }
+        frequencyHz = hz
+    }
 
     /// The frequency actually in use: the custom value in Advanced mode, the
     /// calibrated flicker-free value in Simple mode, or the shipped default.
@@ -482,7 +546,12 @@ final class AppState: ObservableObject {
     private func apply() {
         guard let c = controller else { return }
 
-        let running = effectiveRunning
+        // Backstop. Every enable path is gated above; if one ever is not,
+        // this is what stops it reaching the hardware.
+        if effectiveRunning, !consentGranted {
+            Log.lifecycle.error("dim requested without recorded consent — refusing to engage")
+        }
+        let running = effectiveRunning && consentGranted
         let f = effectiveFrequency
         let d = duty()
         // Source of truth is the ENGINE, not a shadow bool: calibration and
@@ -638,6 +707,15 @@ final class AppState: ObservableObject {
         let now = inScheduleWindow()
         if force || now != lastInWindow {
             if now {
+                // Deliberately NOT the consent alert: the schedule fires
+                // unattended, and a modal nobody is there to answer would
+                // block the app until they came back. Automation simply does
+                // not get to be the first thing that turns dimming on.
+                guard consentGranted else {
+                    Log.lifecycle.notice("schedule: window entered but consent has not been given — not enabling")
+                    lastInWindow = now
+                    return
+                }
                 if advancedMode { frequencyHz = scheduleFrequency }
                 isEnabled = true
             } else {
@@ -684,7 +762,7 @@ final class AppState: ObservableObject {
     /// must not be a way around the acknowledgment.
     func toggleDimming() {
         guard available, acknowledged else { return }
-        isEnabled.toggle()
+        setEnabled(!isEnabled)
         Log.lifecycle.info("hotkey toggled dimming")
     }
 
@@ -812,6 +890,8 @@ final class AppState: ObservableObject {
         scheduleEndMinutes = 7 * 60
         scheduleFrequency = FrequencyPreset.high
         acknowledged = false
+        consent.clear()
+        consentGranted = false
         clearCalibration()
         for key in [Keys.ack, Keys.brightness, Keys.freq, Keys.advanced, Keys.floor,
                     Keys.schedEnabled, Keys.schedStart, Keys.schedEnd, Keys.schedFreq] {

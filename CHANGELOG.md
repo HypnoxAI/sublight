@@ -10,6 +10,24 @@ stability on.
 
 ## [Unreleased]
 
+### Added
+- **Informed consent before the first backlight command.** Sublight's only
+  mechanism is flicker, every mode it can offer sits in the 3–30 Hz
+  photosensitive band, and none of them is flicker-free — so the first time
+  anyone enables dimming, the app now says so plainly in a modal and asks,
+  *before* a single command reaches the daemon. Declining changes nothing and
+  records nothing. Accepting writes a versioned marker beside the dirty flag in
+  Application Support; bumping `ConsentMarker.currentVersion` alongside the
+  copy re-asks everyone. The schedule deliberately does not raise the prompt —
+  automation that fires unattended does not get to be the first thing that
+  turns dimming on. The CLI does not block (it is a research harness) but every
+  mutating command points at `SAFETY.md` on stderr until the marker exists.
+- **`SAFETY.md`**, linked from the README's warning section and again directly
+  above the install instructions: what the flicker mechanically is, who should
+  not use it — including anyone who can merely *see* the keyboard — the stop
+  conditions, how to recover a stuck backlight, and why a read-back value is
+  not evidence and your eyes are.
+
 ### Fixed
 - **High mode's long-standing irregularity was never the engine — it was a
   daemon-side cycle-period limit, and the presets sat on the wrong side of

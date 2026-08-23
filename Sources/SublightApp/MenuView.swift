@@ -150,7 +150,8 @@ struct MenuView: View {
 
     private var simpleControls: some View {
         VStack(alignment: .leading, spacing: 9) {
-            Toggle("Dim keyboard below minimum", isOn: $state.isEnabled)
+            Toggle("Dim keyboard below minimum",
+                   isOn: Binding(get: { state.isEnabled }, set: { state.setEnabled($0) }))
                 .accessibilityHint("Dims the built-in backlight below the system's lowest setting.")
             if state.isEnabled { brightnessSlider }
             Text("Dims the built-in backlight below the system's lowest setting.")
@@ -161,7 +162,8 @@ struct MenuView: View {
 
     private var advancedControls: some View {
         VStack(alignment: .leading, spacing: 9) {
-            Toggle("Dim keyboard", isOn: $state.isEnabled)
+            Toggle("Dim keyboard",
+                   isOn: Binding(get: { state.isEnabled }, set: { state.setEnabled($0) }))
                 .accessibilityHint("Dims the backlight below the system minimum at the chosen frequency.")
 
             if state.isEnabled {
