@@ -34,6 +34,71 @@ Certificate of Origin 1.1, reproduced below.
    changed it (Apache 2.0 §4(b)).
 4. Sign off every commit (`-s`) and open a pull request.
 
+## Building and testing
+
+```bash
+swift build                                    # both products, debug
+swift build -c release --product sublight-cli  # the CLI + probe harness
+swift build -c release --product SublightApp   # the app binary
+./scripts/make_app.sh                          # assemble + ad-hoc sign build/Sublight.app
+swift test                                     # the pure-logic suite
+```
+
+Requires Xcode Command Line Tools and a Swift 6 toolchain. There is nothing to
+install beyond that — the package has no dependencies and will never acquire
+any.
+
+### What CI proves, and what it cannot
+
+CI runs `swift build` and `swift test` on a pinned macOS runner. That covers
+everything deterministic: the anchor arithmetic, schedule windows, solar maths,
+the dirty flag and consent markers, the command-truth counters, glyph geometry,
+and the API-surface decision logic.
+
+**It cannot tell you whether the keyboard actually dimmed.** No CI runner has a
+backlit keyboard, the bridge resolves its class at runtime so nothing links
+against CoreBrightness at build time, and the two read-back APIs are blind to
+real LED output (see [docs/COREBRIGHTNESS.md](docs/COREBRIGHTNESS.md)). A green
+check means the logic is sound, never that the light behaved.
+
+### Hardware runbook
+
+Anything touching the engine, the bridge, or the frequency band has to be
+checked by eye, on a real machine, in a dim room:
+
+```bash
+sublight-cli dump            # the real method table on YOUR machine
+sublight-cli sig             # true type encodings; must match, or the app self-disables
+sublight-cli probe           # guided: clamp sweep, fade experiment, ramp shape
+sublight-cli hold --freq 8 --duty 0.15 --seconds 30    # one engine run, with counters
+sublight-cli status          # counters from the last recorded run
+```
+
+Read the counters, not your impression of them: `scheduled` / `fired` /
+`executed` / `skipped` separate "the engine did not send it" from "the daemon
+did not act on it", which is the distinction almost every backlight bug turns
+on. Per-command detail is in the unified log at debug level (below).
+
+If you changed the frequency band or the ceiling, re-run the five-minute soak
+in the README's "Re-qualifying after a macOS update" and watch the keys at
+roughly 0:30, 2:30 and 4:30.
+
+## Formatting and style
+
+No formatter is enforced; match the file you are editing. Four-space indent,
+roughly 80–90 columns, and `// MARK:` sections in longer types.
+
+Comments here carry more weight than usual. The codebase documents *why* —
+which alternative was tried, what the hardware actually did, why an obvious
+simplification is wrong — because most of its constraints are empirical and
+invisible from the code. A comment that restates the line below it is noise; a
+comment recording a measurement or a rejected approach is the point. If you
+remove a constraint, remove the comment explaining it in the same change.
+
+Commit messages are a plain subject and body. No generated or boilerplate
+trailers; the DCO `Signed-off-by` line is the one exception, and it is
+required.
+
 ## Observing the engine
 
 Everything the engine does is in the unified log under the app's bundle

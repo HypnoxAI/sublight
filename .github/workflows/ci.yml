@@ -16,11 +16,22 @@ jobs:
     # bridge resolves classes at runtime, so nothing links against
     # CoreBrightness at build time. Hardware behaviour is still verified by
     # eye on real machines (docs/SPEC.md §9); CI guards the logic.
+    #
+    # The runner image is PINNED rather than `macos-latest`: a moving label
+    # would silently change the toolchain under us, and this project's whole
+    # discipline is that nothing changes without being noticed. The Swift
+    # version is then asserted rather than assumed, so an image refresh that
+    # moves off Swift 6 fails loudly here instead of producing confusing
+    # compile errors later.
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
       - name: Toolchain
-        run: swift --version
+        run: |
+          swift --version
+          xcodebuild -version
+          swift --version 2>&1 | grep -qE 'Swift version 6' \
+            || { echo "::error::expected a Swift 6 toolchain on this runner image"; exit 1; }
       - name: Build CLI
         run: swift build -c release --product sublight-cli
       - name: Build app
