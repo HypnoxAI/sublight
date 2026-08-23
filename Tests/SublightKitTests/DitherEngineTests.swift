@@ -8,6 +8,7 @@
 //
 
 import XCTest
+
 @testable import SublightKit
 
 /// Records every command with its uptime timestamp. Thread-safe: the engine
@@ -32,12 +33,18 @@ final class RecordingCommander: BacklightCommanding {
 
     private func record(_ c: Command) {
         onCommand?(c)
-        lock.lock(); _entries.append(Entry(command: c, at: DispatchTime.now().uptimeNanoseconds)); lock.unlock()
+        lock.lock();
+        _entries.append(Entry(command: c, at: DispatchTime.now().uptimeNanoseconds));
+        lock.unlock()
     }
 
     func setBrightness(_ value: Float) -> Bool { record(.set(value)); return true }
-    func restoreSystemControl(level: Float) -> Bool { record(.restore(level)); return true }
-    func assertSuppression() -> SuppressionFlips { record(.assertSuppression); return flips }
+    func restoreSystemControl(level: Float) -> Bool {
+        record(.restore(level)); return true
+    }
+    func assertSuppression() -> SuppressionFlips {
+        record(.assertSuppression); return flips
+    }
 }
 
 final class DitherEngineTests: XCTestCase {
@@ -55,13 +62,15 @@ final class DitherEngineTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("sublight-engine-\(UUID().uuidString)")
+        tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "sublight-engine-\(UUID().uuidString)")
         suiteName = "sublight.tests.\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)!
         flag = DirtyFlag(directory: tempDir, defaults: defaults)
         recorder = RecordingCommander()
         diag = EngineDiagnostics()
-        engine = DitherEngine(commander: recorder, highLevel: 0.0625, dirtyFlag: flag, diagnostics: diag)
+        engine = DitherEngine(
+            commander: recorder, highLevel: 0.0625, dirtyFlag: flag, diagnostics: diag)
         // These tests exercise the engine's TIMING logic — alternation, phase
         // continuity, ramps, the err-dark rule — and deliberately run above the
         // product's stability ceiling so a test sees dozens of edges in a
@@ -104,7 +113,9 @@ final class DitherEngineTests: XCTestCase {
     }
 
     private func sets() -> [Float] {
-        recorder.commands.compactMap { if case .set(let v) = $0 { return v } else { return nil } }
+        recorder.commands.compactMap {
+            if case .set(let v) = $0 { return v } else { return nil }
+        }
     }
 
     // MARK: Alternation and restore
@@ -116,12 +127,15 @@ final class DitherEngineTests: XCTestCase {
         wait(0.15)
 
         let cmds = recorder.commands
-        XCTAssertEqual(cmds.first, .assertSuppression, "suppression is asserted before the first edge")
+        XCTAssertEqual(
+            cmds.first, .assertSuppression,
+            "suppression is asserted before the first edge")
         XCTAssertEqual(cmds.last, .restore(0.4), "the last command is the restore")
         XCTAssertFalse(engine.isRunning)
 
         let levels = sets()
-        XCTAssertGreaterThanOrEqual(levels.count, 14, "≈20 edges in 0.5 s at 20 Hz; got \(levels.count)")
+        XCTAssertGreaterThanOrEqual(
+            levels.count, 14, "≈20 edges in 0.5 s at 20 Hz; got \(levels.count)")
         XCTAssertEqual(levels.first, 0.0625, "the first edge is ON")
         for (i, v) in levels.enumerated() {
             XCTAssertEqual(v, i % 2 == 0 ? 0.0625 : 0, "edge \(i) must alternate ON/OFF")
@@ -131,7 +145,7 @@ final class DitherEngineTests: XCTestCase {
     func testRampDownStillEndsWithRestoreAndStops() {
         engine.start(frequencyHz: 20, duty: 0.3)
         wait(0.3)
-        engine.stopAndRestore(ramp: 0.2)   // 4 cycles at 20 Hz
+        engine.stopAndRestore(ramp: 0.2)  // 4 cycles at 20 Hz
         wait(0.6)
         XCTAssertEqual(recorder.commands.last, .restore(0.4))
         XCTAssertFalse(engine.isRunning)
@@ -141,14 +155,15 @@ final class DitherEngineTests: XCTestCase {
     func testRestoreNowCutsThroughARampDown() {
         engine.start(frequencyHz: 10, duty: 0.5)
         wait(0.25)
-        engine.stopAndRestore(ramp: 5)     // would take 5 s
+        engine.stopAndRestore(ramp: 5)  // would take 5 s
         wait(0.05)
         engine.restoreNow()
         XCTAssertEqual(recorder.commands.last, .restore(0.4))
         XCTAssertFalse(engine.isRunning)
         let count = recorder.commands.count
         wait(0.3)
-        XCTAssertEqual(recorder.commands.count, count, "no edges after a synchronous restore")
+        XCTAssertEqual(
+            recorder.commands.count, count, "no edges after a synchronous restore")
     }
 
     func testStartRampReachesTargetDutyAndReportsTargetState() {
@@ -171,8 +186,9 @@ final class DitherEngineTests: XCTestCase {
         // Median again, and for the same reason as in the phase-continuity
         // test: one load-delayed handler must not fail a test about geometry.
         let sorted = offsets.sorted()
-        XCTAssertEqual(sorted[sorted.count / 2], 15, accuracy: 8,
-                       "median OFF offset after ramp: \(sorted)")
+        XCTAssertEqual(
+            sorted[sorted.count / 2], 15, accuracy: 8,
+            "median OFF offset after ramp: \(sorted)")
     }
 
     // MARK: Dirty flag
@@ -185,7 +201,8 @@ final class DitherEngineTests: XCTestCase {
         XCTAssertFalse(flag.isSet)
         engine.start(frequencyHz: 20, duty: 0.5)
         wait(0.2)
-        XCTAssertEqual(flagAtFirstCommand, true, "flag exists before the first backlight command")
+        XCTAssertEqual(
+            flagAtFirstCommand, true, "flag exists before the first backlight command")
         XCTAssertTrue(flag.isSet)
         engine.stopAndRestore(ramp: 0)
         wait(0.1)
@@ -196,7 +213,9 @@ final class DitherEngineTests: XCTestCase {
 
     func testRestoreNowIsSilentWhenNeverEngagedButForceCommands() {
         engine.restoreNow()
-        XCTAssertTrue(recorder.commands.isEmpty, "quitting without ever dimming must not touch the backlight")
+        XCTAssertTrue(
+            recorder.commands.isEmpty,
+            "quitting without ever dimming must not touch the backlight")
         engine.restoreLevel = 0.3
         engine.restoreNow(force: true)
         XCTAssertEqual(recorder.commands, [.restore(0.3)])
@@ -228,7 +247,9 @@ final class DitherEngineTests: XCTestCase {
         let before = recorder.entries.count
         engine.setDuty(0.5); engine.setDuty(0.7); engine.setDuty(0.3)
         wait(0.3)
-        let ons = recorder.entries.dropFirst(before).filter { if case .set(let v) = $0.command { return v > 0 }; return false }
+        let ons = recorder.entries.dropFirst(before).filter {
+            if case .set(let v) = $0.command { return v > 0 }; return false
+        }
         XCTAssertGreaterThan(ons.count, 3)
 
         // MEDIAN, not every sample. What this test is actually asserting is
@@ -239,11 +260,14 @@ final class DitherEngineTests: XCTestCase {
         // runner that is routine. The median moves only if the cadence itself
         // moved, which is the regression worth catching, and the total elapsed
         // catches accumulated drift that a median could hide.
-        let spacings = zip(ons, ons.dropFirst()).map { Double($1.at - $0.at) / 1e6 }.sorted()
-        XCTAssertEqual(spacings[spacings.count / 2], 50, accuracy: 5, "median ON-to-ON spacing")
+        let spacings = zip(ons, ons.dropFirst()).map { Double($1.at - $0.at) / 1e6 }
+            .sorted()
+        XCTAssertEqual(
+            spacings[spacings.count / 2], 50, accuracy: 5, "median ON-to-ON spacing")
         let span = Double(ons.last!.at - ons.first!.at) / 1e6
-        XCTAssertEqual(span, Double(ons.count - 1) * 50, accuracy: 12,
-                       "cadence must not drift across the window")
+        XCTAssertEqual(
+            span, Double(ons.count - 1) * 50, accuracy: 12,
+            "cadence must not drift across the window")
     }
 
     func testStartWhileRunningRetunesInsteadOfRestarting() {
@@ -252,8 +276,9 @@ final class DitherEngineTests: XCTestCase {
         let asserts = recorder.commands.filter { $0 == .assertSuppression }.count
         engine.start(frequencyHz: 20, duty: 0.3, rampFrom: 0.85)
         wait(0.15)
-        XCTAssertEqual(recorder.commands.filter { $0 == .assertSuppression }.count, asserts,
-                       "a second start while running is a retune, not a re-engagement")
+        XCTAssertEqual(
+            recorder.commands.filter { $0 == .assertSuppression }.count, asserts,
+            "a second start while running is a retune, not a re-engagement")
         XCTAssertEqual(engine.state, .running(frequencyHz: 20, duty: 0.3))
     }
 
@@ -269,12 +294,18 @@ final class DitherEngineTests: XCTestCase {
         let ons = sets().filter { $0 > 0 }.count
         let offs = sets().filter { $0 == 0 }.count
 
-        XCTAssertEqual(Int(c.high.executed), ons, "executed HIGH must equal the ON commands the seam saw")
-        XCTAssertEqual(Int(c.low.executed), offs, "executed LOW must equal the OFF commands the seam saw")
-        XCTAssertEqual(c.high.executed + c.high.skipped, c.high.fired,
-                       "with no ramp, every fired HIGH either commanded or was skipped")
-        XCTAssertGreaterThanOrEqual(c.high.scheduled, c.high.fired,
-                                    "a deadline can be coalesced away but never fire twice")
+        XCTAssertEqual(
+            Int(c.high.executed), ons,
+            "executed HIGH must equal the ON commands the seam saw")
+        XCTAssertEqual(
+            Int(c.low.executed), offs,
+            "executed LOW must equal the OFF commands the seam saw")
+        XCTAssertEqual(
+            c.high.executed + c.high.skipped, c.high.fired,
+            "with no ramp, every fired HIGH either commanded or was skipped")
+        XCTAssertGreaterThanOrEqual(
+            c.high.scheduled, c.high.fired,
+            "a deadline can be coalesced away but never fire twice")
         XCTAssertEqual(c.nominalPeriodMs, 50, accuracy: 0.001)
         XCTAssertEqual(c.nominalOnWindowMs, 25, accuracy: 0.001)
         XCTAssertGreaterThan(c.high.executed, 5)
@@ -306,13 +337,17 @@ final class DitherEngineTests: XCTestCase {
         let c = engine.counters
         engine.restoreNow()
 
-        XCTAssertGreaterThan(c.high.skipped, 0, "a stall longer than the ON window must skip a HIGH edge")
-        XCTAssertGreaterThan(c.skipMaxLatenessMs, c.nominalOnWindowMs,
-                             "a skip is by definition later than its threshold")
-        XCTAssertEqual(c.skipLastThresholdMs, 7.5, accuracy: 0.5, "the threshold IS the ON window")
+        XCTAssertGreaterThan(
+            c.high.skipped, 0, "a stall longer than the ON window must skip a HIGH edge")
+        XCTAssertGreaterThan(
+            c.skipMaxLatenessMs, c.nominalOnWindowMs,
+            "a skip is by definition later than its threshold")
+        XCTAssertEqual(
+            c.skipLastThresholdMs, 7.5, accuracy: 0.5, "the threshold IS the ON window")
         XCTAssertGreaterThanOrEqual(c.skipMaxRunLength, 1)
-        XCTAssertGreaterThan(c.longestExecutedHighGapMs, c.nominalPeriodMs,
-                             "skipped cycles stretch the gap between executed ON commands")
+        XCTAssertGreaterThan(
+            c.longestExecutedHighGapMs, c.nominalPeriodMs,
+            "skipped cycles stretch the gap between executed ON commands")
     }
 
     func testStateChangeIsDeliveredOnMain() {
@@ -343,10 +378,13 @@ final class FrequencyCeilingTests: XCTestCase {
         tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("sublight-ceiling-\(UUID().uuidString)")
         recorder = RecordingCommander()
-        engine = DitherEngine(commander: recorder, highLevel: 0.0625,
-                              dirtyFlag: DirtyFlag(directory: tempDir,
-                                                   defaults: UserDefaults(suiteName: "sublight.ceiling.\(UUID().uuidString)")!),
-                              diagnostics: EngineDiagnostics())
+        engine = DitherEngine(
+            commander: recorder, highLevel: 0.0625,
+            dirtyFlag: DirtyFlag(
+                directory: tempDir,
+                defaults: UserDefaults(
+                    suiteName: "sublight.ceiling.\(UUID().uuidString)")!),
+            diagnostics: EngineDiagnostics())
     }
 
     override func tearDown() {
@@ -363,11 +401,13 @@ final class FrequencyCeilingTests: XCTestCase {
     }
 
     func testFrequencyRangeStopsAtTheMeasuredCeiling() {
-        XCTAssertEqual(DitherEngine.frequencyRange.upperBound, DitherEngine.maxStableFrequencyHz)
+        XCTAssertEqual(
+            DitherEngine.frequencyRange.upperBound, DitherEngine.maxStableFrequencyHz)
         XCTAssertEqual(DitherEngine.maxStableFrequencyHz, 8.0)
-        XCTAssertGreaterThan(DitherEngine.unstableFrequencyRange.upperBound,
-                             DitherEngine.maxStableFrequencyHz,
-                             "the research range must actually reach past the ceiling")
+        XCTAssertGreaterThan(
+            DitherEngine.unstableFrequencyRange.upperBound,
+            DitherEngine.maxStableFrequencyHz,
+            "the research range must actually reach past the ceiling")
     }
 
     func testAskingForNineRunsAtEight() {
@@ -376,7 +416,9 @@ final class FrequencyCeilingTests: XCTestCase {
         XCTAssertEqual(engine.state, .running(frequencyHz: 8.0, duty: 0.5))
         XCTAssertEqual(engine.clampedFrequency(9.0), 8.0)
         XCTAssertEqual(engine.clampedFrequency(40.0), 8.0)
-        XCTAssertEqual(engine.clampedFrequency(.nan), 8.0, "a non-finite request lands on the ceiling")
+        XCTAssertEqual(
+            engine.clampedFrequency(.nan), 8.0,
+            "a non-finite request lands on the ceiling")
         XCTAssertEqual(engine.clampedFrequency(6.0), 6.0, "a legal request is untouched")
     }
 
@@ -394,8 +436,10 @@ final class FrequencyCeilingTests: XCTestCase {
         engine.start(frequencyHz: 9.0, duty: 0.5)
         wait(0.1)
         XCTAssertEqual(engine.state, .running(frequencyHz: 9.0, duty: 0.5))
-        XCTAssertEqual(engine.clampedFrequency(100.0), DitherEngine.unstableFrequencyRange.upperBound,
-                       "the override lifts the ceiling, it does not remove all bounds")
+        XCTAssertEqual(
+            engine.clampedFrequency(100.0),
+            DitherEngine.unstableFrequencyRange.upperBound,
+            "the override lifts the ceiling, it does not remove all bounds")
     }
 }
 
@@ -414,10 +458,13 @@ final class HardwareTouchedTests: XCTestCase {
             .appendingPathComponent("sublight-touched-\(UUID().uuidString)")
         recorder = RecordingCommander()
         diag = EngineDiagnostics()
-        engine = DitherEngine(commander: recorder, highLevel: 0.0625,
-                              dirtyFlag: DirtyFlag(directory: tempDir,
-                                                   defaults: UserDefaults(suiteName: "sublight.touched.\(UUID().uuidString)")!),
-                              diagnostics: diag)
+        engine = DitherEngine(
+            commander: recorder, highLevel: 0.0625,
+            dirtyFlag: DirtyFlag(
+                directory: tempDir,
+                defaults: UserDefaults(
+                    suiteName: "sublight.touched.\(UUID().uuidString)")!),
+            diagnostics: diag)
         engine.allowsUnstableFrequency = true
     }
 
@@ -439,9 +486,11 @@ final class HardwareTouchedTests: XCTestCase {
     }
 
     func testExitRestoreCommandsNothingWhenTheBacklightWasNeverTouched() {
-        XCTAssertTrue(engine.restoreOnExit(level: 0.4), "a no-op exit still reports success")
-        XCTAssertTrue(recorder.commands.isEmpty,
-                      "quitting without ever dimming must not impose auto-brightness and a level")
+        XCTAssertTrue(
+            engine.restoreOnExit(level: 0.4), "a no-op exit still reports success")
+        XCTAssertTrue(
+            recorder.commands.isEmpty,
+            "quitting without ever dimming must not impose auto-brightness and a level")
     }
 
     func testExitRestoreCommandsOnceTheBacklightHasBeenTouched() {
@@ -460,8 +509,9 @@ final class HardwareTouchedTests: XCTestCase {
         diag.noteHardwareTouched()
         _ = recorder.assertSuppression()
         engine.restoreOnExit(level: 0.4)
-        XCTAssertEqual(recorder.commands.last, .restore(0.4),
-                       "a suppression-only session must still hand control back")
+        XCTAssertEqual(
+            recorder.commands.last, .restore(0.4),
+            "a suppression-only session must still hand control back")
     }
 
     func testHardwareTouchedSurvivesACounterReset() {
@@ -469,11 +519,14 @@ final class HardwareTouchedTests: XCTestCase {
         XCTAssertTrue(diag.hardwareTouched)
         diag.reset()
         XCTAssertEqual(diag.snapshot(), EngineCounters(), "reset clears the measurement…")
-        XCTAssertTrue(diag.hardwareTouched, "…but not the fact that the hardware was touched")
+        XCTAssertTrue(
+            diag.hardwareTouched, "…but not the fact that the hardware was touched")
     }
 
     func testAnyMutatingCommandKindSetsTheFlag() {
-        for kind in ["brightness", "brightness-fade", "auto-brightness", "idle-dim-suspend"] {
+        for kind in [
+            "brightness", "brightness-fade", "auto-brightness", "idle-dim-suspend",
+        ] {
             let d = EngineDiagnostics()
             XCTAssertFalse(d.hardwareTouched)
             d.noteCommand(kind: kind, latencyMs: 0.1)

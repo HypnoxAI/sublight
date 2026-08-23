@@ -34,11 +34,11 @@
 //  Licensed under the Apache License 2.0 — see LICENSE.
 //
 
-import SwiftUI
 import AppKit
 import ServiceManagement
-import os
 import SublightKit
+import SwiftUI
+import os
 
 /// How the schedule decides when to dim.
 enum ScheduleMode: String, CaseIterable, Identifiable {
@@ -102,10 +102,18 @@ final class AppState: ObservableObject {
 
     // Schedule
     @Published var scheduleEnabled: Bool = false { didSet { onScheduleChanged() } }
-    @Published var scheduleStartMinutes: Int = 21 * 60 { didSet { persistSchedule(); reevaluateSchedule(force: true) } }
-    @Published var scheduleEndMinutes: Int = 7 * 60 { didSet { persistSchedule(); reevaluateSchedule(force: true) } }
-    @Published var scheduleFrequency: Double = FrequencyPreset.high { didSet { defaults.set(scheduleFrequency, forKey: Keys.schedFreq) } }
-    @Published var scheduleMode: ScheduleMode = .fixed { didSet { onScheduleModeChanged() } }
+    @Published var scheduleStartMinutes: Int = 21 * 60 {
+        didSet { persistSchedule(); reevaluateSchedule(force: true) }
+    }
+    @Published var scheduleEndMinutes: Int = 7 * 60 {
+        didSet { persistSchedule(); reevaluateSchedule(force: true) }
+    }
+    @Published var scheduleFrequency: Double = FrequencyPreset.high {
+        didSet { defaults.set(scheduleFrequency, forKey: Keys.schedFreq) }
+    }
+    @Published var scheduleMode: ScheduleMode = .fixed {
+        didSet { onScheduleModeChanged() }
+    }
     /// Coordinates for solar scheduling. Entered by hand, used only for local
     /// arithmetic — see Solar.swift for why this isn't CoreLocation.
     @Published var latitude: Double = 0 { didSet { onLocationChanged() } }
@@ -180,13 +188,18 @@ final class AppState: ObservableObject {
         consentPending = consent.isPending
         launchAtLogin = (SMAppService.mainApp.status == .enabled)
         scheduleEnabled = defaults.bool(forKey: Keys.schedEnabled)
-        if let m = defaults.object(forKey: Keys.schedStart) as? Int { scheduleStartMinutes = m }
-        if let m = defaults.object(forKey: Keys.schedEnd) as? Int { scheduleEndMinutes = m }
+        if let m = defaults.object(forKey: Keys.schedStart) as? Int {
+            scheduleStartMinutes = m
+        }
+        if let m = defaults.object(forKey: Keys.schedEnd) as? Int {
+            scheduleEndMinutes = m
+        }
         if let f = defaults.object(forKey: Keys.schedFreq) as? Double {
             scheduleFrequency = min(max(f, Self.freqMin), Self.freqMax)
         }
         if let raw = defaults.string(forKey: Keys.schedMode),
-           let mode = ScheduleMode(rawValue: raw) {
+            let mode = ScheduleMode(rawValue: raw)
+        {
             scheduleMode = mode
         }
         latitude = defaults.object(forKey: Keys.latitude) as? Double ?? 0
@@ -197,7 +210,8 @@ final class AppState: ObservableObject {
         // are city-named, so this usually lands on something sensible without
         // asking for anything — no permission, no network, no typing.
         if !Solar.isValidLocation(latitude: latitude, longitude: longitude),
-           let guess = CityDirectory.currentGuess() {
+            let guess = CityDirectory.currentGuess()
+        {
             latitude = guess.latitude
             longitude = guess.longitude
             cityID = guess.id
@@ -209,13 +223,15 @@ final class AppState: ObservableObject {
         }
         calibratedDate = defaults.object(forKey: calKey("date")) as? Date
         if let raw = defaults.string(forKey: Keys.hotKey),
-           let choice = HotKeyChoice(rawValue: raw) {
+            let choice = HotKeyChoice(rawValue: raw)
+        {
             hotKey = choice
         }
 
         guard hardware.isAppleSilicon else {
             available = false
-            statusText = "Sublight requires an Apple Silicon MacBook with a backlit keyboard."
+            statusText =
+                "Sublight requires an Apple Silicon MacBook with a backlit keyboard."
             return
         }
 
@@ -227,8 +243,10 @@ final class AppState: ObservableObject {
         probeReport = report
         guard report.passed else {
             available = false
-            statusText = "Private API changed on this macOS build (\(report.macOSBuild)); Sublight disabled itself."
-            Log.probe.error("API surface validation failed: \(report.text, privacy: .public)")
+            statusText =
+                "Private API changed on this macOS build (\(report.macOSBuild)); Sublight disabled itself."
+            Log.probe.error(
+                "API surface validation failed: \(report.text, privacy: .public)")
             showProbeFailureAlert(report)
             return
         }
@@ -246,7 +264,9 @@ final class AppState: ObservableObject {
             // else touches the backlight.
             let recovery = c.recoverFromCrashIfNeeded()
             if recovery != .clean {
-                Log.lifecycle.warning("crash recovery at launch: \(String(describing: recovery), privacy: .public)")
+                Log.lifecycle.warning(
+                    "crash recovery at launch: \(String(describing: recovery), privacy: .public)"
+                )
             }
 
             c.engine.onStateChange = { [weak self] s in
@@ -273,7 +293,9 @@ final class AppState: ObservableObject {
                         guard let self else { return }
                         Log.lifecycle.info("resume (\(t.rawValue, privacy: .public))")
                         self.systemSuspended = false
-                        if self.scheduleEnabled { self.lastInWindow = nil; self.reevaluateSchedule(force: true) }
+                        if self.scheduleEnabled {
+                            self.lastInWindow = nil; self.reevaluateSchedule(force: true)
+                        }
                     }
                 }
             )
@@ -317,7 +339,9 @@ final class AppState: ObservableObject {
         } catch {
             available = false
             statusText = "\(error)"
-            Log.bridge.error("backlight engine unavailable: \(String(describing: error), privacy: .public)")
+            Log.bridge.error(
+                "backlight engine unavailable: \(String(describing: error), privacy: .public)"
+            )
         }
     }
 
@@ -328,12 +352,18 @@ final class AppState: ObservableObject {
     var associationText: String {
         let hz = frequencyHz
         let band: String
-        if hz <= 4 { band = "associated with deep, drowsy relaxation" }
-        else if hz <= 7 { band = "associated with calm, relaxed states" }
-        else { band = "associated with alert, focused states" }
-        var s = String(format: "%.1f Hz — %@ in entrainment research. Effects unproven.", hz, band)
+        if hz <= 4 {
+            band = "associated with deep, drowsy relaxation"
+        } else if hz <= 7 {
+            band = "associated with calm, relaxed states"
+        } else {
+            band = "associated with alert, focused states"
+        }
+        var s = String(
+            format: "%.1f Hz — %@ in entrainment research. Effects unproven.", hz, band)
         if hz >= AppState.freqMax - 0.001 {
-            s += " This is the top of the range: above it macOS stops honouring the dither and the light drops out in multi-second gaps."
+            s +=
+                " This is the top of the range: above it macOS stops honouring the dither and the light drops out in multi-second gaps."
         }
         return s
     }
@@ -379,10 +409,11 @@ final class AppState: ObservableObject {
         alert.addButton(withTitle: "I Understand - Enable")
         NSApp.activate(ignoringOtherApps: true)
         guard alert.runModal() == .alertSecondButtonReturn else {
-            Log.lifecycle.notice("consent declined — dimming not enabled, nothing commanded")
+            Log.lifecycle.notice(
+                "consent declined — dimming not enabled, nothing commanded")
             return false
         }
-        consent.record()            // also clears any pending flag
+        consent.record()  // also clears any pending flag
         consentGranted = consent.isGranted
         consentPending = consent.isPending
         return consentGranted
@@ -394,17 +425,21 @@ final class AppState: ObservableObject {
     /// open rather than making the user wait for the next transition.
     func reviewConsentAndEnable() {
         guard requestConsentIfNeeded() else {
-            Log.lifecycle.notice("deferred consent: declined from the popover; pending flag kept")
+            Log.lifecycle.notice(
+                "deferred consent: declined from the popover; pending flag kept")
             return
         }
         guard scheduleEnabled, inScheduleWindow() else {
-            Log.lifecycle.notice("deferred consent: granted, but the schedule window is no longer active")
+            Log.lifecycle.notice(
+                "deferred consent: granted, but the schedule window is no longer active")
             return
         }
         if advancedMode { frequencyHz = scheduleFrequency }
         isEnabled = true
         lastInWindow = true
-        Log.lifecycle.notice("deferred consent: granted and the schedule window is still active — engaging")
+        Log.lifecycle.notice(
+            "deferred consent: granted and the schedule window is still active — engaging"
+        )
     }
 
     /// THE enable path. Every route that turns dimming on for a person present
@@ -430,7 +465,8 @@ final class AppState: ObservableObject {
     /// with an active session. Every start/stop flows from this one value
     /// (see the header comment and DimmingPolicy).
     var effectiveRunning: Bool {
-        DimmingPolicy.effectiveRunning(userEnabled: isEnabled, systemSuspended: systemSuspended)
+        DimmingPolicy.effectiveRunning(
+            userEnabled: isEnabled, systemSuspended: systemSuspended)
     }
 
     /// Fill level for the menu bar glyph (StatusGlyph): hollow unless
@@ -438,8 +474,10 @@ final class AppState: ObservableObject {
     /// toggle is on — otherwise the frequency in use bucketed to the nearest
     /// preset: Low 3 Hz → 0.3, Medium 6 Hz → 0.5, High 8 Hz → 0.8.
     var glyphFraction: CGFloat {
-        CGFloat(DimmingPolicy.glyphFraction(userEnabled: isEnabled, systemSuspended: systemSuspended,
-                                            frequencyHz: effectiveFrequency))
+        CGFloat(
+            DimmingPolicy.glyphFraction(
+                userEnabled: isEnabled, systemSuspended: systemSuspended,
+                frequencyHz: effectiveFrequency))
     }
 
     /// A plain-text report for bug reports and support threads.
@@ -453,7 +491,8 @@ final class AppState: ObservableObject {
     var diagnosticsReport: String {
         let os = ProcessInfo.processInfo.operatingSystemVersion
         let info = Bundle.main.infoDictionary
-        let version = (info?["CFBundleShortVersionString"] as? String) ?? SublightVersion.current
+        let version =
+            (info?["CFBundleShortVersionString"] as? String) ?? SublightVersion.current
         let build = (info?["CFBundleVersion"] as? String) ?? "?"
 
         let locationDescription: String
@@ -478,8 +517,10 @@ final class AppState: ObservableObject {
         }
         if let c = controller {
             lines.append("Keyboard ID: \(c.keyboardID)")
-            lines.append(String(format: "Floor: %.4f%@", c.floor,
-                                isCalibrated ? " (calibrated)" : " (default — not calibrated)"))
+            lines.append(
+                String(
+                    format: "Floor: %.4f%@", c.floor,
+                    isCalibrated ? " (calibrated)" : " (default — not calibrated)"))
         }
 
         lines += [
@@ -499,8 +540,10 @@ final class AppState: ObservableObject {
                 switch t.condition {
                 case .normal:
                     let f = DateFormatter(); f.timeStyle = .short; f.dateStyle = .none
-                    lines.append("Sunset/sunrise: \(t.sunset.map(f.string(from:)) ?? "—") / \(t.sunrise.map(f.string(from:)) ?? "—")")
-                case .polarDay:   lines.append("Solar: polar day")
+                    lines.append(
+                        "Sunset/sunrise: \(t.sunset.map(f.string(from:)) ?? "—") / \(t.sunrise.map(f.string(from:)) ?? "—")"
+                    )
+                case .polarDay: lines.append("Solar: polar day")
                 case .polarNight: lines.append("Solar: polar night")
                 }
             }
@@ -557,7 +600,8 @@ final class AppState: ObservableObject {
         let h = minutes / 60, m = minutes % 60
         let suffix = h < 12 ? "AM" : "PM"
         var hour = h % 12; if hour == 0 { hour = 12 }
-        return m == 0 ? "\(hour) \(suffix)" : String(format: "%d:%02d %@", hour, m, suffix)
+        return m == 0
+            ? "\(hour) \(suffix)" : String(format: "%d:%02d %@", hour, m, suffix)
     }
 
     // Time-of-day <-> Date bridges for the DatePickers.
@@ -587,7 +631,8 @@ final class AppState: ObservableObject {
         // Backstop. Every enable path is gated above; if one ever is not,
         // this is what stops it reaching the hardware.
         if effectiveRunning, !consentGranted {
-            Log.lifecycle.error("dim requested without recorded consent — refusing to engage")
+            Log.lifecycle.error(
+                "dim requested without recorded consent — refusing to engage")
         }
         let running = effectiveRunning && consentGranted
         let f = effectiveFrequency
@@ -608,11 +653,16 @@ final class AppState: ObservableObject {
             // sync read and this async call. rampFrom (the enable fade) only
             // takes effect on a true start; it is ignored on a retune.
             if !engineRunning { Log.engine.info("dim on: \(f, privacy: .public) Hz") }
-            c.engine.start(frequencyHz: f, duty: d,
-                           rampFrom: engineRunning ? nil : DitherEngine.rampEndpointDuty)
+            c.engine.start(
+                frequencyHz: f, duty: d,
+                rampFrom: engineRunning ? nil : DitherEngine.rampEndpointDuty)
         } else {
             if engineRunning {
-                if systemSuspended { Log.engine.info("dim suspended") } else { Log.engine.info("dim off") }
+                if systemSuspended {
+                    Log.engine.info("dim suspended")
+                } else {
+                    Log.engine.info("dim off")
+                }
             }
             // Idempotent: a no-op if the engine is already stopped. Sleep/
             // session suspend restores immediately — the display is going away
@@ -632,7 +682,8 @@ final class AppState: ObservableObject {
     // MARK: Schedule
 
     private func minutesToDate(_ m: Int) -> Date {
-        Calendar.current.date(bySettingHour: m / 60, minute: m % 60, second: 0, of: Date()) ?? Date()
+        Calendar.current.date(
+            bySettingHour: m / 60, minute: m % 60, second: 0, of: Date()) ?? Date()
     }
     private func dateToMinutes(_ d: Date) -> Int {
         let c = Calendar.current.dateComponents([.hour, .minute], from: d)
@@ -669,9 +720,9 @@ final class AppState: ObservableObject {
             guard let t = solarTimes else { return nil }
             switch t.condition {
             case .polarNight:
-                return (0, 24 * 60)          // never light — dim all day
+                return (0, 24 * 60)  // never light — dim all day
             case .polarDay:
-                return nil                   // never dark — never dim
+                return nil  // never dark — never dim
             case .normal:
                 guard let rise = t.sunrise, let set = t.sunset else { return nil }
                 return (Solar.minutesOfDay(set), Solar.minutesOfDay(rise))
@@ -735,7 +786,8 @@ final class AppState: ObservableObject {
         guard scheduleTimer == nil else { return }
         // 60 s cadence; timing is approximate (±a few minutes) if the app has
         // been idle and napped — fine for a dimming schedule.
-        scheduleTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+        scheduleTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) {
+            [weak self] _ in
             Task { @MainActor in self?.reevaluateSchedule(force: false) }
         }
     }
@@ -755,14 +807,18 @@ final class AppState: ObservableObject {
             // app until they came back. Automation does not get to be the first
             // thing that turns dimming on — but it does not get to fail
             // silently either, so the skip is recorded and the popover asks.
-            switch DimmingPolicy.scheduleTransition(enteringWindow: now, consentGranted: consentGranted) {
+            switch DimmingPolicy.scheduleTransition(
+                enteringWindow: now, consentGranted: consentGranted)
+            {
             case .engage:
                 if advancedMode { frequencyHz = scheduleFrequency }
                 isEnabled = true
             case .deferForConsent:
                 consent.setPending()
                 consentPending = true
-                Log.lifecycle.notice("schedule: window entered without consent — skipped and deferred to the popover")
+                Log.lifecycle.notice(
+                    "schedule: window entered without consent — skipped and deferred to the popover"
+                )
             case .disengage:
                 isEnabled = false
             }
@@ -777,8 +833,11 @@ final class AppState: ObservableObject {
         isUpdatingLoginItem = true
         defer { isUpdatingLoginItem = false }
         do {
-            if launchAtLogin { try SMAppService.mainApp.register() }
-            else { try SMAppService.mainApp.unregister() }
+            if launchAtLogin {
+                try SMAppService.mainApp.register()
+            } else {
+                try SMAppService.mainApp.unregister()
+            }
         } catch {
             print("Sublight: login item update failed: \(error)")
             launchAtLogin = (SMAppService.mainApp.status == .enabled)
@@ -832,14 +891,14 @@ final class AppState: ObservableObject {
             let alert = NSAlert()
             alert.messageText = "Sublight disabled itself on \(report.macOSBuild)"
             alert.informativeText = """
-            The private CoreBrightness interface Sublight depends on does not match \
-            what it was verified against, so driving it could cause undefined behavior. \
-            Sublight will not touch the keyboard backlight on this build.
+                The private CoreBrightness interface Sublight depends on does not match \
+                what it was verified against, so driving it could cause undefined behavior. \
+                Sublight will not touch the keyboard backlight on this build.
 
-            Please file an issue at github.com/HypnoxAI/sublight and include this report:
+                Please file an issue at github.com/HypnoxAI/sublight and include this report:
 
-            \(report.text)
-            """
+                \(report.text)
+                """
             alert.alertStyle = .critical
             alert.addButton(withTitle: "OK")
             NSApp.activate(ignoringOtherApps: true)
@@ -894,7 +953,8 @@ final class AppState: ObservableObject {
             _ = NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            NSApp.windows.first { $0.canBecomeMain && $0.isVisible }?.orderFrontRegardless()
+            NSApp.windows.first { $0.canBecomeMain && $0.isVisible }?
+                .orderFrontRegardless()
         }
     }
 
@@ -919,7 +979,9 @@ final class AppState: ObservableObject {
     func clearCalibration() {
         calibratedFrequency = nil
         calibratedDate = nil
-        for k in ["frequency", "floor", "date"] { defaults.removeObject(forKey: calKey(k)) }
+        for k in ["frequency", "floor", "date"] {
+            defaults.removeObject(forKey: calKey(k))
+        }
     }
 
     /// Fresh-install state (revokes consent and re-shows onboarding). Leaves the system
@@ -935,12 +997,14 @@ final class AppState: ObservableObject {
         scheduleEndMinutes = 7 * 60
         scheduleFrequency = FrequencyPreset.high
         onboardingSeen = false
-        consent.clear()             // clears the pending flag too
+        consent.clear()  // clears the pending flag too
         consentGranted = false
         consentPending = false
         clearCalibration()
-        for key in [Keys.ack, Keys.brightness, Keys.freq, Keys.advanced, Keys.floor,
-                    Keys.schedEnabled, Keys.schedStart, Keys.schedEnd, Keys.schedFreq] {
+        for key in [
+            Keys.ack, Keys.brightness, Keys.freq, Keys.advanced, Keys.floor,
+            Keys.schedEnabled, Keys.schedStart, Keys.schedEnd, Keys.schedFreq,
+        ] {
             defaults.removeObject(forKey: key)
         }
     }

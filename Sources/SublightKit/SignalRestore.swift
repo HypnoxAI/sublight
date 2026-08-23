@@ -26,14 +26,17 @@ public final class SignalRestore: @unchecked Sendable {
 
     /// Install handlers. Keep the returned object alive for the process
     /// lifetime — dropping it cancels the sources.
-    public init(signals: [Int32] = SignalRestore.defaultSignals,
-                queue: DispatchQueue = EngineQueue.queue,
-                restore: @escaping @Sendable () -> Void) {
+    public init(
+        signals: [Int32] = SignalRestore.defaultSignals,
+        queue: DispatchQueue = EngineQueue.queue,
+        restore: @escaping @Sendable () -> Void
+    ) {
         for sig in signals {
             signal(sig, SIG_IGN)
             let src = DispatchSource.makeSignalSource(signal: sig, queue: queue)
             src.setEventHandler {
-                Log.engine.info("signal \(sig, privacy: .public): restoring backlight and exiting")
+                Log.engine.info(
+                    "signal \(sig, privacy: .public): restoring backlight and exiting")
                 restore()
                 exit(0)
             }

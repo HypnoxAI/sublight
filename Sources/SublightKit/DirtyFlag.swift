@@ -42,7 +42,9 @@ public struct DirtyFlag {
     ///     ~/Library/Application Support/Sublight. Tests inject a temp dir.
     ///   - defaults: where the legacy key is looked for.
     public init(directory: URL? = nil, defaults: UserDefaults = .standard) {
-        let dir = directory ?? FileManager.default
+        let dir =
+            directory
+            ?? FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Sublight", isDirectory: true)
         self.fileURL = dir.appendingPathComponent(Self.fileName)
@@ -60,11 +62,15 @@ public struct DirtyFlag {
     public func set() {
         do {
             try FileManager.default.createDirectory(
-                at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try Data("\(Self.bootSeconds()):\(getpid())\n".utf8).write(to: fileURL, options: .atomic)
+                at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true
+            )
+            try Data("\(Self.bootSeconds()):\(getpid())\n".utf8).write(
+                to: fileURL, options: .atomic)
             Log.engine.debug("dirty flag set (pid \(getpid(), privacy: .public))")
         } catch {
-            Log.engine.error("could not set dirty flag: \(String(describing: error), privacy: .public)")
+            Log.engine.error(
+                "could not set dirty flag: \(String(describing: error), privacy: .public)"
+            )
         }
     }
 
@@ -81,10 +87,12 @@ public struct DirtyFlag {
     /// pid-only and "dirty" formats (both parse as no boot / no pid).
     private func stamp() -> (boot: Int64?, pid: pid_t?) {
         guard let data = try? Data(contentsOf: fileURL),
-              let text = String(data: data, encoding: .utf8) else { return (nil, nil) }
-        let parts = text.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: ":")
+            let text = String(data: data, encoding: .utf8)
+        else { return (nil, nil) }
+        let parts = text.trimmingCharacters(in: .whitespacesAndNewlines).split(
+            separator: ":")
         if parts.count == 2 { return (Int64(parts[0]), pid_t(parts[1])) }
-        if parts.count == 1 { return (nil, pid_t(parts[0])) }   // legacy pid-only
+        if parts.count == 1 { return (nil, pid_t(parts[0])) }  // legacy pid-only
         return (nil, nil)
     }
 
@@ -111,7 +119,9 @@ public struct DirtyFlag {
             // conservative and assume it IS an owner, so we don't stomp it.
             return true
         }
-        let path = String(decoding: buf.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self).lowercased()
+        let path = String(
+            decoding: buf.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self
+        ).lowercased()
         return path.contains("sublight")
     }
 
@@ -125,7 +135,9 @@ public struct DirtyFlag {
             try FileManager.default.removeItem(at: fileURL)
             Log.engine.debug("dirty flag cleared")
         } catch {
-            Log.engine.error("could not clear dirty flag: \(String(describing: error), privacy: .public)")
+            Log.engine.error(
+                "could not clear dirty flag: \(String(describing: error), privacy: .public)"
+            )
         }
     }
 
@@ -152,7 +164,9 @@ public struct DirtyFlag {
         }
 
         let source = fileDirty ? "engine.dirty" : "legacy sublight.active key"
-        Log.engine.warning("previous session did not restore cleanly (\(source, privacy: .public)) — restoring backlight")
+        Log.engine.warning(
+            "previous session did not restore cleanly (\(source, privacy: .public)) — restoring backlight"
+        )
         let ok = restore()
         guard ok else {
             // Keep a marker so the NEXT launch retries. For a legacy-only
@@ -160,7 +174,8 @@ public struct DirtyFlag {
             // safe to drop the legacy key.
             if !fileDirty { set() }
             if legacy { defaults.removeObject(forKey: Self.legacyDefaultsKey) }
-            Log.engine.error("crash recovery: restore command rejected; flag kept for next launch")
+            Log.engine.error(
+                "crash recovery: restore command rejected; flag kept for next launch")
             return .restoreFailed
         }
         if legacy { defaults.removeObject(forKey: Self.legacyDefaultsKey) }

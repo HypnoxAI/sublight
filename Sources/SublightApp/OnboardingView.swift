@@ -22,8 +22,8 @@
 //  Licensed under the Apache License 2.0 — see LICENSE.
 //
 
-import SwiftUI
 import SublightKit
+import SwiftUI
 
 struct OnboardingView: View {
 
@@ -88,8 +88,8 @@ struct OnboardingView: View {
     @ViewBuilder
     private var content: some View {
         switch page {
-        case 0:  welcome
-        case 1:  safety
+        case 0: welcome
+        case 1: safety
         default: calibrate
         }
     }
@@ -99,13 +99,20 @@ struct OnboardingView: View {
     private var welcome: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Welcome to Sublight").font(.title2).bold()
-            Text("macOS won't let the keyboard backlight go below one fixed step, which is still too bright in a genuinely dark room. Sublight goes below it.")
-                .fixedSize(horizontal: false, vertical: true)
-            Text("It does that by modulating the backlight faster than the eye resolves, so the light averages out dimmer than the hardware's own minimum. At the right speed this reads as a steady, dim glow.")
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Label("Apple Silicon MacBooks with a backlit keyboard", systemImage: "laptopcomputer")
-                .font(.callout).foregroundStyle(.secondary)
+            Text(
+                "macOS won't let the keyboard backlight go below one fixed step, which is still too bright in a genuinely dark room. Sublight goes below it."
+            )
+            .fixedSize(horizontal: false, vertical: true)
+            Text(
+                "It does that by modulating the backlight faster than the eye resolves, so the light averages out dimmer than the hardware's own minimum. At the right speed this reads as a steady, dim glow."
+            )
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            Label(
+                "Apple Silicon MacBooks with a backlit keyboard",
+                systemImage: "laptopcomputer"
+            )
+            .font(.callout).foregroundStyle(.secondary)
             Text(state.hardware.summary)
                 .font(.caption).monospaced().foregroundStyle(.tertiary)
         }
@@ -113,20 +120,29 @@ struct OnboardingView: View {
 
     private var safety: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Label("Photosensitive seizure warning", systemImage: "exclamationmark.triangle.fill")
-                .font(.title3).bold()
-                .foregroundStyle(.orange)
+            Label(
+                "Photosensitive seizure warning",
+                systemImage: "exclamationmark.triangle.fill"
+            )
+            .font(.title3).bold()
+            .foregroundStyle(.orange)
 
-            Text("Because Sublight dims by flickering the backlight, it produces flicker in the 2–8 Hz range — a range that can trigger seizures in people with photosensitive epilepsy.")
-                .fixedSize(horizontal: false, vertical: true)
+            Text(
+                "Because Sublight dims by flickering the backlight, it produces flicker in the 2–8 Hz range — a range that can trigger seizures in people with photosensitive epilepsy."
+            )
+            .fixedSize(horizontal: false, vertical: true)
 
-            Text("The light is small, dim, and in peripheral vision, so the risk is low. But if you or anyone using this Mac has epilepsy or any history of photosensitivity, do not use this app. Stop immediately if you feel dizzy, disoriented, or notice any involuntary movement.")
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            Text(
+                "The light is small, dim, and in peripheral vision, so the risk is low. But if you or anyone using this Mac has epilepsy or any history of photosensitivity, do not use this app. Stop immediately if you feel dizzy, disoriented, or notice any involuntary movement."
+            )
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
 
-            Text("Sublight also makes no health claims. Flickering light produces a measurable response in the visual cortex, but there is no reliable evidence it improves mood, focus, or sleep.")
-                .font(.callout).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            Text(
+                "Sublight also makes no health claims. Flickering light produces a measurable response in the visual cortex, but there is no reliable evidence it improves mood, focus, or sleep."
+            )
+            .font(.callout).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
 
         }
     }
@@ -134,11 +150,15 @@ struct OnboardingView: View {
     private var calibrate: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("One last thing").font(.title2).bold()
-            Text("Two numbers differ from Mac to Mac and person to person: where your keyboard's backlight actually bottoms out, and how fast it has to flicker before *you* stop seeing it.")
-                .fixedSize(horizontal: false, vertical: true)
-            Text("Calibration finds both in about a minute. Without it Sublight uses defaults measured on a different machine, which may be wrong for yours — so it's worth doing, ideally with the lights off.")
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            Text(
+                "Two numbers differ from Mac to Mac and person to person: where your keyboard's backlight actually bottoms out, and how fast it has to flicker before *you* stop seeing it."
+            )
+            .fixedSize(horizontal: false, vertical: true)
+            Text(
+                "Calibration finds both in about a minute. Without it Sublight uses defaults measured on a different machine, which may be wrong for yours — so it's worth doing, ideally with the lights off."
+            )
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
             Text("You can always run it later from Settings → General.")
                 .font(.callout).foregroundStyle(.tertiary)
         }

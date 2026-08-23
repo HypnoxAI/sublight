@@ -43,19 +43,21 @@ public struct CityLocation: Identifiable, Hashable, Sendable {
     public var group: String {
         guard let prefix = timeZoneID.split(separator: "/").first else { return "Other" }
         switch prefix {
-        case "America":   return "Americas"
-        case "Europe":    return "Europe"
-        case "Asia":      return "Asia"
-        case "Africa":    return "Africa"
+        case "America": return "Americas"
+        case "Europe": return "Europe"
+        case "Asia": return "Asia"
+        case "Africa": return "Africa"
         case "Australia": return "Oceania"
-        case "Pacific":   return "Pacific"
-        case "Atlantic":  return "Atlantic"
-        default:          return String(prefix)
+        case "Pacific": return "Pacific"
+        case "Atlantic": return "Atlantic"
+        default: return String(prefix)
         }
     }
 
-    public init(_ city: String, _ region: String,
-                _ latitude: Double, _ longitude: Double, _ timeZoneID: String) {
+    public init(
+        _ city: String, _ region: String,
+        _ latitude: Double, _ longitude: Double, _ timeZoneID: String
+    ) {
         self.city = city
         self.region = region
         self.latitude = latitude
@@ -88,12 +90,14 @@ public enum CityDirectory {
     public static func match(timeZoneID: String) -> CityLocation? {
         let inZone = all.filter { $0.timeZoneID == timeZoneID }
         if !inZone.isEmpty {
-            let zoneName = folded(String(timeZoneID.split(separator: "/").last ?? "")
-                .replacingOccurrences(of: "_", with: " "))
+            let zoneName = folded(
+                String(timeZoneID.split(separator: "/").last ?? "")
+                    .replacingOccurrences(of: "_", with: " "))
             if let exact = inZone.first(where: { folded($0.city) == zoneName }) {
                 return exact
             }
-            if let prefixed = inZone.first(where: { folded($0.city).hasPrefix(zoneName) }) {
+            if let prefixed = inZone.first(where: { folded($0.city).hasPrefix(zoneName) })
+            {
                 return prefixed
             }
             return inZone.first
@@ -115,7 +119,9 @@ public enum CityDirectory {
     }
 
     public static var grouped: [(group: String, cities: [CityLocation])] {
-        let order = ["Americas", "Europe", "Africa", "Asia", "Oceania", "Pacific", "Atlantic"]
+        let order = [
+            "Americas", "Europe", "Africa", "Asia", "Oceania", "Pacific", "Atlantic",
+        ]
         let buckets = Dictionary(grouping: all, by: \.group)
         return order.compactMap { name in
             guard let cities = buckets[name] else { return nil }
@@ -129,7 +135,8 @@ public enum CityDirectory {
         .init("Atlanta", "USA", 33.75, -84.39, "America/New_York"),
         .init("Bogotá", "Colombia", 4.71, -74.07, "America/Bogota"),
         .init("Boston", "USA", 42.36, -71.06, "America/New_York"),
-        .init("Buenos Aires", "Argentina", -34.60, -58.38, "America/Argentina/Buenos_Aires"),
+        .init(
+            "Buenos Aires", "Argentina", -34.60, -58.38, "America/Argentina/Buenos_Aires"),
         .init("Calgary", "Canada", 51.05, -114.07, "America/Edmonton"),
         .init("Caracas", "Venezuela", 10.48, -66.90, "America/Caracas"),
         .init("Chicago", "USA", 41.88, -87.63, "America/Chicago"),

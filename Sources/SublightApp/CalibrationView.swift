@@ -11,8 +11,8 @@
 //  Licensed under the Apache License 2.0 — see LICENSE.
 //
 
-import SwiftUI
 import SublightKit
+import SwiftUI
 
 struct CalibrationView: View {
 
@@ -29,11 +29,11 @@ struct CalibrationView: View {
             header
 
             switch cal.step {
-            case .intro:     introStep
-            case .floor:     floorStep
+            case .intro: introStep
+            case .floor: floorStep
             case .frequency: frequencyStep
-            case .level:     levelStep
-            case .summary:   summaryStep
+            case .level: levelStep
+            case .summary: summaryStep
             }
 
             Spacer(minLength: 0)
@@ -91,15 +91,20 @@ struct CalibrationView: View {
 
     private var introStep: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Sublight's defaults were measured on one machine. This finds the numbers that are right for **your** Mac and **your** eyes — where the backlight actually bottoms out, and how fast it has to flicker before you stop seeing it.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            Text(
+                "Sublight's defaults were measured on one machine. This finds the numbers that are right for **your** Mac and **your** eyes — where the backlight actually bottoms out, and how fast it has to flicker before you stop seeing it."
+            )
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
 
             Label("Takes about a minute", systemImage: "clock")
                 .font(.caption).foregroundStyle(.secondary)
-            Label("Best in a dark room — turn off the lights first", systemImage: "moon.stars")
-                .font(.caption).foregroundStyle(.secondary)
+            Label(
+                "Best in a dark room — turn off the lights first",
+                systemImage: "moon.stars"
+            )
+            .font(.caption).foregroundStyle(.secondary)
             Label("Watch the keyboard, not the screen", systemImage: "keyboard")
                 .font(.caption).foregroundStyle(.secondary)
 
@@ -111,9 +116,11 @@ struct CalibrationView: View {
 
     private var floorStep: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("The keyboard will switch back and forth between two levels. Watch it and tell me whether the light **changes at all**, or stays completely steady.")
-                .font(.callout).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            Text(
+                "The keyboard will switch back and forth between two levels. Watch it and tell me whether the light **changes at all**, or stays completely steady."
+            )
+            .font(.callout).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
 
             playbackIndicator
 
@@ -138,9 +145,11 @@ struct CalibrationView: View {
 
     private var frequencyStep: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Now the keyboard is dimmed by flickering it. Watch it for a few seconds. Does the light look **steady**, or can you see it **pulsing**?")
-                .font(.callout).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            Text(
+                "Now the keyboard is dimmed by flickering it. Watch it for a few seconds. Does the light look **steady**, or can you see it **pulsing**?"
+            )
+            .font(.callout).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
 
             playbackIndicator
 
@@ -162,9 +171,11 @@ struct CalibrationView: View {
 
     private var levelStep: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Last one. Set the keyboard where you'd actually want it in the dark — dim enough to be comfortable, bright enough to be useful.")
-                .font(.callout).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            Text(
+                "Last one. Set the keyboard where you'd actually want it in the dark — dim enough to be comfortable, bright enough to be useful."
+            )
+            .font(.callout).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 8) {
                 Image(systemName: "sun.min").foregroundStyle(.secondary)
@@ -172,7 +183,8 @@ struct CalibrationView: View {
                 Slider(value: $cal.previewLevel, in: 0.1...0.95)
                     .onChange(of: cal.previewLevel) { _, _ in cal.applyPreview() }
                     .accessibilityLabel("Preferred brightness")
-                    .accessibilityValue("\(Int((cal.previewLevel * 100).rounded())) percent")
+                    .accessibilityValue(
+                        "\(Int((cal.previewLevel * 100).rounded())) percent")
                 Image(systemName: "sun.max").foregroundStyle(.secondary)
                     .accessibilityHidden(true)
             }
@@ -202,21 +214,26 @@ struct CalibrationView: View {
                     }
                     GridRow {
                         Text("Preferred level").foregroundStyle(.secondary)
-                        Text(String(format: "%.0f%%", r.brightness * 100)).monospacedDigit()
+                        Text(String(format: "%.0f%%", r.brightness * 100))
+                            .monospacedDigit()
                     }
                 }
                 .font(.callout)
             }
 
             if cal.frequencyHitCeiling {
-                Text("Note: your steady point landed at the top of the range. 8 Hz is Sublight's measured ceiling on this hardware — above it macOS stops honouring the dither and the keys fall dark for seconds at a time, so the ladder does not go higher. If the light still looks like it is pulsing, that is the honest answer at this frequency rather than something to tune away.")
-                    .font(.caption2).foregroundStyle(.orange)
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(
+                    "Note: your steady point landed at the top of the range. 8 Hz is Sublight's measured ceiling on this hardware — above it macOS stops honouring the dither and the keys fall dark for seconds at a time, so the ladder does not go higher. If the light still looks like it is pulsing, that is the honest answer at this frequency rather than something to tune away."
+                )
+                .font(.caption2).foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
             }
 
-            Text("Saved for \(state.hardware.modelIdentifier). A different Mac will ask to calibrate again.")
-                .font(.caption2).foregroundStyle(.tertiary)
-                .fixedSize(horizontal: false, vertical: true)
+            Text(
+                "Saved for \(state.hardware.modelIdentifier). A different Mac will ask to calibrate again."
+            )
+            .font(.caption2).foregroundStyle(.tertiary)
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 

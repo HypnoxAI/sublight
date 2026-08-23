@@ -21,9 +21,9 @@
 //  Licensed under the Apache License 2.0 — see LICENSE.
 //
 
+import Darwin
 import Foundation
 import ObjectiveC
-import Darwin
 
 public struct ValidationReport: Equatable {
 
@@ -46,7 +46,8 @@ public struct ValidationReport: Equatable {
             case .selectorMissing:
                 return "\(selector): selector missing"
             case .encodingMismatch(let expected, let actual):
-                return "\(selector): type encoding changed — expected \(expected), found \(actual)"
+                return
+                    "\(selector): type encoding changed — expected \(expected), found \(actual)"
             }
         }
     }
@@ -61,11 +62,15 @@ public struct ValidationReport: Equatable {
 
     /// Human-readable report — what the user pastes into an issue.
     public var text: String {
-        var lines = ["Sublight API surface probe: \(passed ? "PASS" : "FAIL")",
-                     "macOS: \(macOSBuild)",
-                     "Class: \(APISurface.className)"]
+        var lines = [
+            "Sublight API surface probe: \(passed ? "PASS" : "FAIL")",
+            "macOS: \(macOSBuild)",
+            "Class: \(APISurface.className)",
+        ]
         if failures.isEmpty {
-            lines.append("All \(APISurface.expectedEncodings.count) required selectors present with verified type encodings.")
+            lines.append(
+                "All \(APISurface.expectedEncodings.count) required selectors present with verified type encodings."
+            )
         } else {
             lines.append("Failures (\(failures.count)):")
             lines += failures.map { "  - \($0.description)" }
@@ -85,11 +90,11 @@ public enum APISurface {
     /// offsets. `i` at offset 20 in the fade setter is the 32-bit fadeSpeed.
     public static let expectedEncodings: [(selector: String, encoding: String)] = [
         ("setBrightness:fadeSpeed:commit:forKeyboard:", "B36@0:8f16i20B24Q28"),
-        ("setBrightness:forKeyboard:",                  "B28@0:8f16Q20"),
-        ("brightnessForKeyboard:",                      "f24@0:8Q16"),
-        ("backlightLevelForKeyboard:",                  "f24@0:8Q16"),
-        ("enableAutoBrightness:forKeyboard:",           "B28@0:8B16Q20"),
-        ("suspendIdleDimming:forKeyboard:",             "B28@0:8B16Q20"),
+        ("setBrightness:forKeyboard:", "B28@0:8f16Q20"),
+        ("brightnessForKeyboard:", "f24@0:8Q16"),
+        ("backlightLevelForKeyboard:", "f24@0:8Q16"),
+        ("enableAutoBrightness:forKeyboard:", "B28@0:8B16Q20"),
+        ("suspendIdleDimming:forKeyboard:", "B28@0:8B16Q20"),
     ]
 
     /// Everything `sublight-cli sig` prints: the required set plus the
@@ -101,7 +106,8 @@ public enum APISurface {
         ]
 
     /// The change-notification selector probed by `sublight-cli notify-probe`.
-    public static let notificationSelector = "registerNotificationForKeys:keyboardID:block:"
+    public static let notificationSelector =
+        "registerNotificationForKeys:keyboardID:block:"
 
     // MARK: Decision logic (pure)
 
@@ -129,13 +135,16 @@ public enum APISurface {
                     continue
                 }
                 if got != want {
-                    failures.append(.init(selector: selector,
-                                          kind: .encodingMismatch(expected: want, actual: got)))
+                    failures.append(
+                        .init(
+                            selector: selector,
+                            kind: .encodingMismatch(expected: want, actual: got)))
                 }
             }
         }
-        return ValidationReport(passed: failures.isEmpty, failures: failures,
-                                macOSBuild: macOSBuild, observed: encodings)
+        return ValidationReport(
+            passed: failures.isEmpty, failures: failures,
+            macOSBuild: macOSBuild, observed: encodings)
     }
 
     // MARK: Live probe
@@ -146,10 +155,14 @@ public enum APISurface {
     public static func validate() -> ValidationReport {
         let build = ProcessInfo.processInfo.operatingSystemVersionString
         guard dlopen(frameworkPath, RTLD_LAZY) != nil else {
-            return evaluate(frameworkLoaded: false, classPresent: false, encodings: [:], macOSBuild: build)
+            return evaluate(
+                frameworkLoaded: false, classPresent: false, encodings: [:],
+                macOSBuild: build)
         }
         guard let cls = NSClassFromString(className) else {
-            return evaluate(frameworkLoaded: true, classPresent: false, encodings: [:], macOSBuild: build)
+            return evaluate(
+                frameworkLoaded: true, classPresent: false, encodings: [:],
+                macOSBuild: build)
         }
         var observed: [String: String?] = [:]
         for selector in introspectionSelectors {
@@ -160,11 +173,15 @@ public enum APISurface {
                 observed[selector] = .some(nil)
             }
         }
-        let report = evaluate(frameworkLoaded: true, classPresent: true, encodings: observed, macOSBuild: build)
+        let report = evaluate(
+            frameworkLoaded: true, classPresent: true, encodings: observed,
+            macOSBuild: build)
         if report.passed {
             Log.probe.info("API surface verified on \(build, privacy: .public)")
         } else {
-            Log.probe.error("API surface FAILED on \(build, privacy: .public): \(report.failures.map(\.description).joined(separator: "; "), privacy: .public)")
+            Log.probe.error(
+                "API surface FAILED on \(build, privacy: .public): \(report.failures.map(\.description).joined(separator: "; "), privacy: .public)"
+            )
         }
         return report
     }

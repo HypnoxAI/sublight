@@ -30,21 +30,21 @@ enum HotKeyChoice: String, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .off:              return "Off"
-        case .optionCommandK:   return "⌥⌘K"
-        case .controlOptionK:   return "⌃⌥K"
-        case .shiftCommandD:    return "⇧⌘D"
-        case .controlCommandB:  return "⌃⌘B"
+        case .off: return "Off"
+        case .optionCommandK: return "⌥⌘K"
+        case .controlOptionK: return "⌃⌥K"
+        case .shiftCommandD: return "⇧⌘D"
+        case .controlCommandB: return "⌃⌘B"
         }
     }
 
     var keyCode: UInt32? {
         switch self {
-        case .off:              return nil
-        case .optionCommandK:   return HotKeyManager.Key.k
-        case .controlOptionK:   return HotKeyManager.Key.k
-        case .shiftCommandD:    return HotKeyManager.Key.d
-        case .controlCommandB:  return HotKeyManager.Key.b
+        case .off: return nil
+        case .optionCommandK: return HotKeyManager.Key.k
+        case .controlOptionK: return HotKeyManager.Key.k
+        case .shiftCommandD: return HotKeyManager.Key.d
+        case .controlCommandB: return HotKeyManager.Key.b
         }
     }
 

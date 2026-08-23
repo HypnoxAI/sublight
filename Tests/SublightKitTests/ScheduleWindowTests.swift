@@ -11,6 +11,7 @@
 //
 
 import XCTest
+
 @testable import SublightKit
 
 final class ScheduleWindowTests: XCTestCase {
@@ -20,15 +21,18 @@ final class ScheduleWindowTests: XCTestCase {
     /// 21:00 → 07:00, the typical night-time schedule.
     func testOvernightWindow() {
         let start = hm(21), end = hm(7)
-        XCTAssertTrue(ScheduleWindow.contains(now: hm(21), start: start, end: end),
-                      "should be active exactly at the start")
+        XCTAssertTrue(
+            ScheduleWindow.contains(now: hm(21), start: start, end: end),
+            "should be active exactly at the start")
         XCTAssertTrue(ScheduleWindow.contains(now: hm(23, 30), start: start, end: end))
-        XCTAssertTrue(ScheduleWindow.contains(now: hm(0), start: start, end: end),
-                      "should stay active across midnight")
+        XCTAssertTrue(
+            ScheduleWindow.contains(now: hm(0), start: start, end: end),
+            "should stay active across midnight")
         XCTAssertTrue(ScheduleWindow.contains(now: hm(6, 59), start: start, end: end))
 
-        XCTAssertFalse(ScheduleWindow.contains(now: hm(7), start: start, end: end),
-                       "end is exclusive")
+        XCTAssertFalse(
+            ScheduleWindow.contains(now: hm(7), start: start, end: end),
+            "end is exclusive")
         XCTAssertFalse(ScheduleWindow.contains(now: hm(12), start: start, end: end))
         XCTAssertFalse(ScheduleWindow.contains(now: hm(20, 59), start: start, end: end))
     }
@@ -48,7 +52,8 @@ final class ScheduleWindowTests: XCTestCase {
     func testEqualTimesIsEmpty() {
         for h in [0, 9, 21] {
             XCTAssertFalse(ScheduleWindow.contains(now: hm(h), start: hm(h), end: hm(h)))
-            XCTAssertFalse(ScheduleWindow.contains(now: hm((h + 5) % 24), start: hm(h), end: hm(h)))
+            XCTAssertFalse(
+                ScheduleWindow.contains(now: hm((h + 5) % 24), start: hm(h), end: hm(h)))
         }
     }
 

@@ -30,9 +30,9 @@
 //
 
 import Foundation
+import SublightKit
 import SwiftUI
 import os
-import SublightKit
 
 @MainActor
 final class CalibrationController: ObservableObject {
@@ -42,11 +42,11 @@ final class CalibrationController: ObservableObject {
 
         var title: String {
             switch self {
-            case .intro:     return "Calibrate for this Mac"
-            case .floor:     return "Step 1 of 3 — brightness floor"
+            case .intro: return "Calibrate for this Mac"
+            case .floor: return "Step 1 of 3 — brightness floor"
             case .frequency: return "Step 2 of 3 — flicker"
-            case .level:     return "Step 3 of 3 — your dim level"
-            case .summary:   return "Calibration complete"
+            case .level: return "Step 3 of 3 — your dim level"
+            case .summary: return "Calibration complete"
             }
         }
     }
@@ -109,11 +109,11 @@ final class CalibrationController: ObservableObject {
 
     var progress: Double {
         switch step {
-        case .intro:     return 0
-        case .floor:     return Double(round) / Double(Self.rounds) / 3
+        case .intro: return 0
+        case .floor: return Double(round) / Double(Self.rounds) / 3
         case .frequency: return (1 + Double(round) / Double(Self.rounds)) / 3
-        case .level:     return 2.0 / 3
-        case .summary:   return 1
+        case .level: return 2.0 / 3
+        case .summary: return 1
         }
     }
 
@@ -177,10 +177,12 @@ final class CalibrationController: ObservableObject {
             guard let self else { return }
             for _ in 0..<Self.floorAlternations {
                 guard !Task.isCancelled else { return }
-                self.controller.bridge.setBrightness(reference, self.controller.keyboardID)
+                self.controller.bridge.setBrightness(
+                    reference, self.controller.keyboardID)
                 try? await Task.sleep(nanoseconds: 500_000_000)
                 guard !Task.isCancelled else { return }
-                self.controller.bridge.setBrightness(candidate, self.controller.keyboardID)
+                self.controller.bridge.setBrightness(
+                    candidate, self.controller.keyboardID)
                 try? await Task.sleep(nanoseconds: 500_000_000)
             }
             guard !Task.isCancelled else { return }
@@ -217,7 +219,7 @@ final class CalibrationController: ObservableObject {
         playback?.cancel()
         isPlaying = true
         controller.frequencyHz = f
-        controller.setLevel(0.5 * floor)   // mid duty: fair test of steadiness
+        controller.setLevel(0.5 * floor)  // mid duty: fair test of steadiness
         playback = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 2_000_000_000)
             guard !Task.isCancelled else { return }
@@ -232,7 +234,8 @@ final class CalibrationController: ObservableObject {
         round += 1
         if round >= Self.rounds {
             measuredFrequency = (freqHi * 2).rounded() / 2
-            Log.calibration.info("steadiest at: \(self.measuredFrequency ?? 0, privacy: .public) Hz")
+            Log.calibration.info(
+                "steadiest at: \(self.measuredFrequency ?? 0, privacy: .public) Hz")
             round = 0
             step = .level
             applyPreview()

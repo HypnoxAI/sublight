@@ -133,7 +133,8 @@ public final class DitherEngine: @unchecked Sendable {
     /// Command-truth tally. Process-wide in production (the bridge feeds the
     /// same one with command latencies); tests inject their own.
     private let diag: EngineDiagnostics
-    private static let signposter = OSSignposter(subsystem: Log.subsystem, category: "engine")
+    private static let signposter = OSSignposter(
+        subsystem: Log.subsystem, category: "engine")
 
     // MARK: State — every field below is confined to `queue`.
 
@@ -181,9 +182,11 @@ public final class DitherEngine: @unchecked Sendable {
     ///   - diagnostics: command-truth tally; defaults to the process-wide one
     ///     the bridge also feeds, so engine edges and daemon latencies land in
     ///     a single report.
-    public init(commander: BacklightCommanding, highLevel: Float,
-                dirtyFlag: DirtyFlag = DirtyFlag(),
-                diagnostics: EngineDiagnostics = .shared) {
+    public init(
+        commander: BacklightCommanding, highLevel: Float,
+        dirtyFlag: DirtyFlag = DirtyFlag(),
+        diagnostics: EngineDiagnostics = .shared
+    ) {
         self.commander = commander
         self._highLevel = highLevel
         self.dirtyFlag = dirtyFlag
@@ -240,10 +243,15 @@ public final class DitherEngine: @unchecked Sendable {
 
     /// Start dithering, or retune in place if already running. `rampFrom`
     /// fades the duty in from that value over `rampDuration` (enable fade).
-    public func start(frequencyHz: Double, duty: Double,
-                      rampFrom: Double? = nil, rampDuration: TimeInterval = 0.35) {
-        queue.async { self.startLocked(frequencyHz: frequencyHz, duty: duty,
-                                       rampFrom: rampFrom, rampDuration: rampDuration) }
+    public func start(
+        frequencyHz: Double, duty: Double,
+        rampFrom: Double? = nil, rampDuration: TimeInterval = 0.35
+    ) {
+        queue.async {
+            self.startLocked(
+                frequencyHz: frequencyHz, duty: duty,
+                rampFrom: rampFrom, rampDuration: rampDuration)
+        }
     }
 
     /// Change frequency. Takes a fresh anchor (phase reset). No-op if equal
@@ -290,7 +298,9 @@ public final class DitherEngine: @unchecked Sendable {
         EngineQueue.run {
             if let level { _restoreLevel = min(max(level, 0), 1) }
             guard diag.hardwareTouched else {
-                Log.lifecycle.info("exit: backlight was never commanded this session — leaving system state untouched")
+                Log.lifecycle.info(
+                    "exit: backlight was never commanded this session — leaving system state untouched"
+                )
                 return true
             }
             return restoreLocked(force: true)
@@ -328,7 +338,8 @@ public final class DitherEngine: @unchecked Sendable {
         guard hz.isFinite else { return range.upperBound }
         let f = min(max(hz, range.lowerBound), range.upperBound)
         if abs(f - hz) > 0.001 {
-            Log.engine.notice("""
+            Log.engine.notice(
+                """
                 frequency \(hz, format: .fixed(precision: 2), privacy: .public) Hz clamped to \
                 \(f, format: .fixed(precision: 2), privacy: .public) Hz \
                 (measured stability ceiling \(Self.maxStableFrequencyHz, format: .fixed(precision: 2), privacy: .public) Hz\
@@ -338,8 +349,10 @@ public final class DitherEngine: @unchecked Sendable {
         return f
     }
 
-    private func startLocked(frequencyHz hz: Double, duty: Double,
-                             rampFrom: Double?, rampDuration rampDurationRaw: TimeInterval) {
+    private func startLocked(
+        frequencyHz hz: Double, duty: Double,
+        rampFrom: Double?, rampDuration rampDurationRaw: TimeInterval
+    ) {
         let f = clampFrequencyLocked(hz)
         let target = DitherSchedule.clampDuty(duty)
         let rampDuration = rampDurationRaw.isFinite ? max(rampDurationRaw, 0) : 0
@@ -362,7 +375,9 @@ public final class DitherEngine: @unchecked Sendable {
         diag.noteHardwareTouched()
         let flips = commander.assertSuppression()
         if flips.any {
-            Log.engine.notice("start: suppression flags were off — autoBrightnessOn=\(String(describing: flips.autoBrightnessWasOn), privacy: .public) idleDimActive=\(String(describing: flips.idleDimWasActive), privacy: .public); asserted")
+            Log.engine.notice(
+                "start: suppression flags were off — autoBrightnessOn=\(String(describing: flips.autoBrightnessWasOn), privacy: .public) idleDimActive=\(String(describing: flips.idleDimWasActive), privacy: .public); asserted"
+            )
         }
 
         let initial = rampFrom.map(DitherSchedule.clampDuty) ?? target
@@ -370,12 +385,15 @@ public final class DitherEngine: @unchecked Sendable {
         installTimers(DitherSchedule(anchorNanos: anchor, frequencyHz: f, duty: initial))
 
         if let from = rampFrom.map(DitherSchedule.clampDuty), abs(from - target) > 0.001 {
-            ramp = Ramp(startCycle: 0, cycles: max(1, UInt64((rampDuration * f).rounded())),
-                        from: from, to: target, thenRestore: false)
+            ramp = Ramp(
+                startCycle: 0, cycles: max(1, UInt64((rampDuration * f).rounded())),
+                from: from, to: target, thenRestore: false)
         }
         startKeeper()
         setState(.running(frequencyHz: f, duty: target))
-        Log.engine.info("start: \(f, format: .fixed(precision: 2), privacy: .public) Hz, duty \(target, format: .fixed(precision: 2), privacy: .public)")
+        Log.engine.info(
+            "start: \(f, format: .fixed(precision: 2), privacy: .public) Hz, duty \(target, format: .fixed(precision: 2), privacy: .public)"
+        )
     }
 
     private func setFrequencyLocked(_ hz: Double) {
@@ -386,7 +404,9 @@ public final class DitherEngine: @unchecked Sendable {
         let anchor = DispatchTime.now().uptimeNanoseconds
         installTimers(DitherSchedule(anchorNanos: anchor, frequencyHz: f, duty: s.duty))
         setState(.running(frequencyHz: f, duty: s.duty))
-        Log.engine.info("frequency: \(f, format: .fixed(precision: 2), privacy: .public) Hz (new anchor)")
+        Log.engine.info(
+            "frequency: \(f, format: .fixed(precision: 2), privacy: .public) Hz (new anchor)"
+        )
     }
 
     private func setDutyLocked(_ duty: Double) {
@@ -405,9 +425,12 @@ public final class DitherEngine: @unchecked Sendable {
         let duration = durationRaw.isFinite ? max(durationRaw, 0) : 0
         let cycles = UInt64((duration * s.frequencyHz).rounded())
         if duration > 0, cycles >= 1 {
-            ramp = Ramp(startCycle: cycle, cycles: cycles, from: s.duty,
-                        to: Self.rampEndpointDuty, thenRestore: true)
-            Log.engine.info("stop: ramping down over \(cycles, privacy: .public) cycles, then restore")
+            ramp = Ramp(
+                startCycle: cycle, cycles: cycles, from: s.duty,
+                to: Self.rampEndpointDuty, thenRestore: true)
+            Log.engine.info(
+                "stop: ramping down over \(cycles, privacy: .public) cycles, then restore"
+            )
         } else {
             restoreLocked(force: false)
         }
@@ -436,10 +459,13 @@ public final class DitherEngine: @unchecked Sendable {
             if commander.restoreSystemControl(level: level) {
                 engaged = false
                 dirtyFlag.clear()
-                Log.engine.info("restored system control (level \(level, format: .fixed(precision: 2), privacy: .public))")
+                Log.engine.info(
+                    "restored system control (level \(level, format: .fixed(precision: 2), privacy: .public))"
+                )
             } else {
                 restoreOK = false
-                Log.engine.error("restore command rejected by the daemon; dirty flag kept")
+                Log.engine.error(
+                    "restore command rejected by the daemon; dirty flag kept")
             }
         }
         if wasRunning { setState(.stopped) }
@@ -460,13 +486,15 @@ public final class DitherEngine: @unchecked Sendable {
 
         let high = DispatchSource.makeTimerSource(flags: .strict, queue: queue)
         high.setEventHandler { [weak self] in self?.highEdge() }
-        high.schedule(deadline: DispatchTime(uptimeNanoseconds: s.highDeadline(cycle: 0)),
-                      repeating: period, leeway: .milliseconds(1))
+        high.schedule(
+            deadline: DispatchTime(uptimeNanoseconds: s.highDeadline(cycle: 0)),
+            repeating: period, leeway: .milliseconds(1))
 
         let low = DispatchSource.makeTimerSource(flags: .strict, queue: queue)
         low.setEventHandler { [weak self] in self?.lowEdge() }
-        low.schedule(deadline: DispatchTime(uptimeNanoseconds: s.lowDeadline(cycle: 0)),
-                     repeating: period, leeway: .milliseconds(1))
+        low.schedule(
+            deadline: DispatchTime(uptimeNanoseconds: s.lowDeadline(cycle: 0)),
+            repeating: period, leeway: .milliseconds(1))
 
         highTimer = high
         lowTimer = low
@@ -487,11 +515,12 @@ public final class DitherEngine: @unchecked Sendable {
         // is the slider's behaviour, not a ramp's, and firing it here would
         // send OFF then ON back-to-back in one handler.
         if let r = ramp {
-            let progress = r.cycles == 0 ? 1 : Double(cycle &- r.startCycle) / Double(r.cycles)
+            let progress =
+                r.cycles == 0 ? 1 : Double(cycle &- r.startCycle) / Double(r.cycles)
             if progress >= 1 {
                 ramp = nil
                 if r.thenRestore {
-                    restoreLocked(force: false)   // the last command is the restore
+                    restoreLocked(force: false)  // the last command is the restore
                     return
                 }
                 applyDuty(r.to, allowImmediateLow: false)
@@ -515,7 +544,8 @@ public final class DitherEngine: @unchecked Sendable {
             let thresholdMs = Double(s.lowOffsetNanos) / 1e6
             Self.signposter.emitEvent("SKIP_HIGH")
             diag.noteHighSkipped(latenessMs: latenessMs, thresholdMs: thresholdMs)
-            Log.engine.debug("""
+            Log.engine.debug(
+                """
                 edge HIGH cycle \(self.cycle, privacy: .public) SKIPPED (err-dark) \
                 t=\(Double(now) / 1e6, format: .fixed(precision: 3), privacy: .public)ms \
                 late=\(latenessMs, format: .fixed(precision: 3), privacy: .public)ms \
@@ -526,7 +556,8 @@ public final class DitherEngine: @unchecked Sendable {
 
         let issuedAt = DispatchTime.now().uptimeNanoseconds
         let due = s.highDeadline(cycle: cycle)
-        Log.engine.debug("""
+        Log.engine.debug(
+            """
             edge HIGH cycle \(self.cycle, privacy: .public) EXECUTE \
             t=\(Double(issuedAt) / 1e6, format: .fixed(precision: 3), privacy: .public)ms \
             late=\(Double(issuedAt > due ? issuedAt - due : 0) / 1e6, format: .fixed(precision: 3), privacy: .public)ms \
@@ -558,7 +589,8 @@ public final class DitherEngine: @unchecked Sendable {
         }
         let issuedAt = DispatchTime.now().uptimeNanoseconds
         let due = s.lowDeadline(cycle: n)
-        Log.engine.debug("""
+        Log.engine.debug(
+            """
             edge LOW cycle \(n, privacy: .public) EXECUTE\(immediate ? " (immediate, duty change)" : "", privacy: .public) \
             t=\(Double(issuedAt) / 1e6, format: .fixed(precision: 3), privacy: .public)ms \
             late=\(Double(issuedAt > due ? issuedAt - due : 0) / 1e6, format: .fixed(precision: 3), privacy: .public)ms \
@@ -598,12 +630,15 @@ public final class DitherEngine: @unchecked Sendable {
                 // The rule says a ramp must not fire OFF here, so this cycle's
                 // OFF is genuinely dropped — counted, not silent.
                 diag.noteLowSkipped()
-                Log.engine.debug("edge LOW cycle \(current, privacy: .public) DROPPED (ramp step moved the OFF deadline into the past)")
+                Log.engine.debug(
+                    "edge LOW cycle \(current, privacy: .public) DROPPED (ramp step moved the OFF deadline into the past)"
+                )
             }
         }
         let next = s.nextLowDeadline(after: now, lowAlreadyFiredIn: lowFiredInCycle)
-        low.schedule(deadline: DispatchTime(uptimeNanoseconds: next),
-                     repeating: .nanoseconds(Int(s.periodNanos)), leeway: .milliseconds(1))
+        low.schedule(
+            deadline: DispatchTime(uptimeNanoseconds: next),
+            repeating: .nanoseconds(Int(s.periodNanos)), leeway: .milliseconds(1))
     }
 
     // MARK: Keeper
@@ -640,7 +675,8 @@ public final class DitherEngine: @unchecked Sendable {
         stopKeeper()
         let k = DispatchSource.makeTimerSource(queue: queue)
         k.setEventHandler { [weak self] in self?.keeperFired() }
-        k.schedule(deadline: .now() + .seconds(60), repeating: .seconds(60), leeway: .seconds(5))
+        k.schedule(
+            deadline: .now() + .seconds(60), repeating: .seconds(60), leeway: .seconds(5))
         k.resume()
         keeper = k
     }
@@ -655,7 +691,9 @@ public final class DitherEngine: @unchecked Sendable {
         diag.noteHardwareTouched()
         let flips = commander.assertSuppression()
         if flips.any {
-            Log.engine.warning("keeper: suppression flag flipped mid-run — autoBrightnessOn=\(String(describing: flips.autoBrightnessWasOn), privacy: .public) idleDimActive=\(String(describing: flips.idleDimWasActive), privacy: .public); re-asserted")
+            Log.engine.warning(
+                "keeper: suppression flag flipped mid-run — autoBrightnessOn=\(String(describing: flips.autoBrightnessWasOn), privacy: .public) idleDimActive=\(String(describing: flips.idleDimWasActive), privacy: .public); re-asserted"
+            )
         } else {
             Log.engine.debug("keeper: suppression flags intact")
         }

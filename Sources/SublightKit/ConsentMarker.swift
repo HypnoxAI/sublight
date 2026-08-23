@@ -47,7 +47,9 @@ public struct ConsentMarker {
     ///   ~/Library/Application Support/Sublight, beside the dirty flag.
     ///   Tests inject a temp dir.
     public init(directory: URL? = nil) {
-        let dir = directory ?? FileManager.default
+        let dir =
+            directory
+            ?? FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Sublight", isDirectory: true)
         self.fileURL = dir.appendingPathComponent(Self.fileName)
@@ -76,11 +78,14 @@ public struct ConsentMarker {
         guard !isPending else { return }
         do {
             try FileManager.default.createDirectory(
-                at: pendingFileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+                at: pendingFileURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true)
             try Data("1\n".utf8).write(to: pendingFileURL, options: .atomic)
             Log.lifecycle.notice("deferred consent: pending flag set")
         } catch {
-            Log.lifecycle.error("could not set pending consent flag: \(String(describing: error), privacy: .public)")
+            Log.lifecycle.error(
+                "could not set pending consent flag: \(String(describing: error), privacy: .public)"
+            )
         }
     }
 
@@ -107,7 +112,8 @@ public struct ConsentMarker {
         // format: a marker we cannot parse must never read as "granted", but
         // one we can read in an obvious older shape should still count.
         if let text = String(data: data, encoding: .utf8),
-           let n = Int(text.trimmingCharacters(in: .whitespacesAndNewlines)) {
+            let n = Int(text.trimmingCharacters(in: .whitespacesAndNewlines))
+        {
             return n
         }
         return nil
@@ -119,11 +125,14 @@ public struct ConsentMarker {
     /// Record consent. Atomic, so a crash mid-write cannot leave a torn file
     /// that later reads as granted.
     @discardableResult
-    public func record(version: Int = ConsentMarker.currentVersion,
-                       at date: Date = Date()) -> Bool {
+    public func record(
+        version: Int = ConsentMarker.currentVersion,
+        at date: Date = Date()
+    ) -> Bool {
         do {
             try FileManager.default.createDirectory(
-                at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+                at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true
+            )
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             encoder.dateEncodingStrategy = .iso8601
@@ -134,7 +143,9 @@ public struct ConsentMarker {
             Log.lifecycle.notice("consent v\(version, privacy: .public) recorded")
             return true
         } catch {
-            Log.lifecycle.error("could not record consent: \(String(describing: error), privacy: .public)")
+            Log.lifecycle.error(
+                "could not record consent: \(String(describing: error), privacy: .public)"
+            )
             return false
         }
     }

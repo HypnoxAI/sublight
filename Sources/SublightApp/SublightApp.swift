@@ -35,9 +35,9 @@
 //  Licensed under the Apache License 2.0 — see LICENSE.
 //
 
-import SwiftUI
 import AppKit
 import SublightKit
+import SwiftUI
 
 @main
 struct SublightApp: App {
@@ -57,7 +57,9 @@ struct SublightApp: App {
             // state: hollow when idle, filling from the right with frequency.
             Image(nsImage: StatusGlyph.image(litFraction: state.glyphFraction))
                 .accessibilityLabel("Sublight")
-                .accessibilityValue(state.systemSuspended ? "suspended" : (state.isEnabled ? "dimming" : "idle"))
+                .accessibilityValue(
+                    state.systemSuspended
+                        ? "suspended" : (state.isEnabled ? "dimming" : "idle"))
         }
         .menuBarExtraStyle(.window)
 

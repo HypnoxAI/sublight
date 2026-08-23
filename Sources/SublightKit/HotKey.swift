@@ -20,9 +20,9 @@
 //  Licensed under the Apache License 2.0 — see LICENSE.
 //
 
+import Carbon.HIToolbox
 import Foundation
 import os
-import Carbon.HIToolbox
 
 public final class HotKeyManager {
 
@@ -103,20 +103,25 @@ public final class HotKeyManager {
     /// previously held. Returns false if the combination is already taken by
     /// another app — the caller should surface that rather than fail silently.
     @discardableResult
-    public func register(keyCode: UInt32, modifiers: UInt32,
-                         action: @escaping @Sendable () -> Void) -> Bool {
+    public func register(
+        keyCode: UInt32, modifiers: UInt32,
+        action: @escaping @Sendable () -> Void
+    ) -> Bool {
         unregister()
         Self.installSharedHandlerIfNeeded()
 
         let newID = Self.registry.add(action)
 
-        let hotKeyID = EventHotKeyID(signature: OSType(0x5355424C), id: newID) // 'SUBL'
+        let hotKeyID = EventHotKeyID(signature: OSType(0x5355424C), id: newID)  // 'SUBL'
         var ref: EventHotKeyRef?
-        let status = RegisterEventHotKey(keyCode, modifiers, hotKeyID,
-                                         GetApplicationEventTarget(), 0, &ref)
+        let status = RegisterEventHotKey(
+            keyCode, modifiers, hotKeyID,
+            GetApplicationEventTarget(), 0, &ref)
         guard status == noErr, let ref else {
             Self.registry.remove(newID)
-            Log.lifecycle.error("hotkey registration failed (status \(status, privacy: .public)) — likely already claimed by another app")
+            Log.lifecycle.error(
+                "hotkey registration failed (status \(status, privacy: .public)) — likely already claimed by another app"
+            )
             return false
         }
         hotKeyRef = ref
@@ -138,25 +143,31 @@ public final class HotKeyManager {
 
     private static func installSharedHandlerIfNeeded() {
         guard registry.claimHandlerInstall() else { return }
-        var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard),
-                                 eventKind: UInt32(kEventHotKeyPressed))
+        var spec = EventTypeSpec(
+            eventClass: OSType(kEventClassKeyboard),
+            eventKind: UInt32(kEventHotKeyPressed))
         var installed: EventHandlerRef?
-        InstallEventHandler(GetApplicationEventTarget(), { _, event, _ -> OSStatus in
-            guard let event else { return OSStatus(eventNotHandledErr) }
-            var hkID = EventHotKeyID()
-            let status = GetEventParameter(event,
-                                           EventParamName(kEventParamDirectObject),
-                                           EventParamType(typeEventHotKeyID),
-                                           nil,
-                                           MemoryLayout<EventHotKeyID>.size,
-                                           nil,
-                                           &hkID)
-            guard status == noErr, let action = HotKeyManager.registry.action(for: hkID.id) else {
-                return OSStatus(eventNotHandledErr)
-            }
-            DispatchQueue.main.async { action() }
-            return noErr
-        }, 1, &spec, nil, &installed)
+        InstallEventHandler(
+            GetApplicationEventTarget(),
+            { _, event, _ -> OSStatus in
+                guard let event else { return OSStatus(eventNotHandledErr) }
+                var hkID = EventHotKeyID()
+                let status = GetEventParameter(
+                    event,
+                    EventParamName(kEventParamDirectObject),
+                    EventParamType(typeEventHotKeyID),
+                    nil,
+                    MemoryLayout<EventHotKeyID>.size,
+                    nil,
+                    &hkID)
+                guard status == noErr,
+                    let action = HotKeyManager.registry.action(for: hkID.id)
+                else {
+                    return OSStatus(eventNotHandledErr)
+                }
+                DispatchQueue.main.async { action() }
+                return noErr
+            }, 1, &spec, nil, &installed)
         registry.storeHandler(installed)
     }
 }

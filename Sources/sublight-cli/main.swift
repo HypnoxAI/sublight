@@ -19,106 +19,107 @@ import SublightKit
 // MARK: - Helpers
 
 func printUsage() {
-    print("""
-    sublight-cli — sub-minimum keyboard backlight control (Apple Silicon)
+    print(
+        """
+        sublight-cli — sub-minimum keyboard backlight control (Apple Silicon)
 
-    USAGE:
-      sublight-cli version                    Print the version and exit
-      sublight-cli status                     Show keyboard ID, brightness, auto-brightness
-      sublight-cli ids                        List keyboard backlight IDs
-      sublight-cli dump                       Print KeyboardBrightnessClient's REAL runtime
-                                              selectors (verify the bridge's table)
-      sublight-cli sig                        Run the private-API capability probe and print the
-                                              TRUE type encodings of the key selectors
-      sublight-cli get                        Print reported brightness (0..1)
-      sublight-cli set <0..1>                 Direct set (subject to the system clamp)
-      sublight-cli auto <on|off>              Toggle keyboard auto-brightness
-      sublight-cli probe                      Full guided probe: signatures, dual read-back,
-                                              clamp sweep, FADE-hold test, ramp (interactive)
-      sublight-cli probe --fade               Just the fade-controlled sub-floor experiment
-      sublight-cli probe --ramp               Just the fade-ramp measurement
-      sublight-cli dither-test [--duty d]      Spike: find the toggle-rate ceiling, then
-                                              flicker-test a frequency ladder (WATCH THE KEYS)
-      sublight-cli dither-test --slow          Slow 2–40 Hz fade-riding sweep (WATCH; flickers
-                                              in the photosensitive-seizure range)
-      sublight-cli dither-test --fine [--duty d]  Fine 6–15 Hz sweep with a floor A/B at each
-                                              step, to judge dimness (WATCH THE KEYS)
-      sublight-cli hold <0..1> [options]      Dither-hold a sub-minimum level (Ctrl-C restores)
-      sublight-cli pair-sweep --on-ms <X>     DIAGNOSTIC: raw ON/OFF pairs straight at the
-                                              bridge (engine bypassed) — one ON-window per run
-      sublight-cli pulse <low|medium|high>     Continuous pulse preset (~5/6/8 Hz). Experimental;
-                                              flickers in the photosensitive range. Ctrl-C stops.
-      sublight-cli restore [<0..1>]           Panic restore (default lands at 0.30)
-      sublight-cli notify-probe               Spike: can the change-notification tell your
-                                              keypress from our writes? (interactive)
-      sublight-cli social-preview --out <dir> DEV: render the 1280x640 GitHub social card
-                                              from the v1 mark. Deterministic; touches no hardware.
-      sublight-cli glyph render --out <dir>   DEV: render the menu bar icon's states and the
-                                              README legend from StatusGlyph. Touches no
-                                              hardware; deterministic, so re-rendering an
-                                              unchanged glyph produces identical bytes.
+        USAGE:
+          sublight-cli version                    Print the version and exit
+          sublight-cli status                     Show keyboard ID, brightness, auto-brightness
+          sublight-cli ids                        List keyboard backlight IDs
+          sublight-cli dump                       Print KeyboardBrightnessClient's REAL runtime
+                                                  selectors (verify the bridge's table)
+          sublight-cli sig                        Run the private-API capability probe and print the
+                                                  TRUE type encodings of the key selectors
+          sublight-cli get                        Print reported brightness (0..1)
+          sublight-cli set <0..1>                 Direct set (subject to the system clamp)
+          sublight-cli auto <on|off>              Toggle keyboard auto-brightness
+          sublight-cli probe                      Full guided probe: signatures, dual read-back,
+                                                  clamp sweep, FADE-hold test, ramp (interactive)
+          sublight-cli probe --fade               Just the fade-controlled sub-floor experiment
+          sublight-cli probe --ramp               Just the fade-ramp measurement
+          sublight-cli dither-test [--duty d]      Spike: find the toggle-rate ceiling, then
+                                                  flicker-test a frequency ladder (WATCH THE KEYS)
+          sublight-cli dither-test --slow          Slow 2–40 Hz fade-riding sweep (WATCH; flickers
+                                                  in the photosensitive-seizure range)
+          sublight-cli dither-test --fine [--duty d]  Fine 6–15 Hz sweep with a floor A/B at each
+                                                  step, to judge dimness (WATCH THE KEYS)
+          sublight-cli hold <0..1> [options]      Dither-hold a sub-minimum level (Ctrl-C restores)
+          sublight-cli pair-sweep --on-ms <X>     DIAGNOSTIC: raw ON/OFF pairs straight at the
+                                                  bridge (engine bypassed) — one ON-window per run
+          sublight-cli pulse <low|medium|high>     Continuous pulse preset (~5/6/8 Hz). Experimental;
+                                                  flickers in the photosensitive range. Ctrl-C stops.
+          sublight-cli restore [<0..1>]           Panic restore (default lands at 0.30)
+          sublight-cli notify-probe               Spike: can the change-notification tell your
+                                                  keypress from our writes? (interactive)
+          sublight-cli social-preview --out <dir> DEV: render the 1280x640 GitHub social card
+                                                  from the v1 mark. Deterministic; touches no hardware.
+          sublight-cli glyph render --out <dir>   DEV: render the menu bar icon's states and the
+                                                  README legend from StatusGlyph. Touches no
+                                                  hardware; deterministic, so re-rendering an
+                                                  unchanged glyph produces identical bytes.
 
-    STABILITY CEILING:
-      The engine refuses to dither above a MEASURED ceiling (8.0 Hz on the
-      reference machine — see DitherEngine.maxStableFrequencyHz). A higher
-      request is clamped and the clamp is logged. `--allow-unstable` lifts it
-      for re-measurement only; above the ceiling the daemon stops honouring the
-      dither and the keys fall dark for seconds at a time.
+        STABILITY CEILING:
+          The engine refuses to dither above a MEASURED ceiling (8.0 Hz on the
+          reference machine — see DitherEngine.maxStableFrequencyHz). A higher
+          request is clamped and the clamp is logged. `--allow-unstable` lifts it
+          for re-measurement only; above the ceiling the daemon stops honouring the
+          dither and the keys fall dark for seconds at a time.
 
-    HOLD OPTIONS:
-      --floor <f>     Assumed system clamp floor        (default 0.0625)
-      --period <s>    Dither period in seconds          (default 0.25)
-      --freq <hz>     Dither frequency in Hz            (alias for 1/--period)
-      --duty <d>      Drive the engine at this duty directly instead of deriving it
-                      from <level>. Same as passing level = d x floor, without the
-                      arithmetic; <level> then becomes optional.
-      --seconds <n>   Run for n seconds, then restore and print the command-truth
-                      counters (omit to hold until Ctrl-C)
-      --sample-hz <h>     Poll BOTH read-backs (brightnessForKeyboard: and
-                          backlightLevelForKeyboard:) at h Hz on the engine queue
-                          during the run, timestamped against the last commanded level.
-      --sample-csv <path> Where to write those samples (default: beside diagnostics.json)
-      --pad-writes        DIAGNOSTIC: send every edge command TWICE — first the value
-                          offset by --pad-offset, then the value itself — doubling the
-                          command rate at an unchanged period. Breaks the writes/s vs
-                          cycle-period degeneracy. Padded value goes FIRST so an OFF
-                          edge never parks on a sub-floor value.
-      --pad-offset <f>    Padding offset (default 0.002; small enough to stay inside
-                          the same 1/16 output step)
-      --allow-unstable    RESEARCH ONLY: lift the measured stability ceiling so a
-                          frequency above it is honoured instead of clamped.
+        HOLD OPTIONS:
+          --floor <f>     Assumed system clamp floor        (default 0.0625)
+          --period <s>    Dither period in seconds          (default 0.25)
+          --freq <hz>     Dither frequency in Hz            (alias for 1/--period)
+          --duty <d>      Drive the engine at this duty directly instead of deriving it
+                          from <level>. Same as passing level = d x floor, without the
+                          arithmetic; <level> then becomes optional.
+          --seconds <n>   Run for n seconds, then restore and print the command-truth
+                          counters (omit to hold until Ctrl-C)
+          --sample-hz <h>     Poll BOTH read-backs (brightnessForKeyboard: and
+                              backlightLevelForKeyboard:) at h Hz on the engine queue
+                              during the run, timestamped against the last commanded level.
+          --sample-csv <path> Where to write those samples (default: beside diagnostics.json)
+          --pad-writes        DIAGNOSTIC: send every edge command TWICE — first the value
+                              offset by --pad-offset, then the value itself — doubling the
+                              command rate at an unchanged period. Breaks the writes/s vs
+                              cycle-period degeneracy. Padded value goes FIRST so an OFF
+                              edge never parks on a sub-floor value.
+          --pad-offset <f>    Padding offset (default 0.002; small enough to stay inside
+                              the same 1/16 output step)
+          --allow-unstable    RESEARCH ONLY: lift the measured stability ceiling so a
+                              frequency above it is honoured instead of clamped.
 
-    PAIR-SWEEP OPTIONS (diagnostic; bypasses the engine):
-      --on-ms <X>     ON window in milliseconds         (required)
-      --off-ms <Y>    OFF gap in milliseconds           (default 400)
-      --seconds <n>   Duration                          (default 4)
-      --fade <int>    Use setBrightness:fadeSpeed:commit: with this fadeSpeed.
-                      Omit to use the plain setter the ENGINE uses (daemon default fade).
-      --floor <f>     Level commanded for ON            (default 0.0625)
+        PAIR-SWEEP OPTIONS (diagnostic; bypasses the engine):
+          --on-ms <X>     ON window in milliseconds         (required)
+          --off-ms <Y>    OFF gap in milliseconds           (default 400)
+          --seconds <n>   Duration                          (default 4)
+          --fade <int>    Use setBrightness:fadeSpeed:commit: with this fadeSpeed.
+                          Omit to use the plain setter the ENGINE uses (daemon default fade).
+          --floor <f>     Level commanded for ON            (default 0.0625)
 
-    COMMAND-TRUTH COUNTERS:
-      `status`, `hold --seconds` and `pair-sweep` print scheduled / fired / executed /
-      skipped edge counts and daemon round-trip latency. Per-command detail is in the
-      unified log at debug level:
-        log stream --level debug --predicate \
-          'subsystem == "com.hypnox.sublight" AND category == "engine"'
+        COMMAND-TRUTH COUNTERS:
+          `status`, `hold --seconds` and `pair-sweep` print scheduled / fired / executed /
+          skipped edge counts and daemon round-trip latency. Per-command detail is in the
+          unified log at debug level:
+            log stream --level debug --predicate \
+              'subsystem == "com.hypnox.sublight" AND category == "engine"'
 
-    EXIT CODES:
-      0   success
-      1   usage error
-      2   backlight unavailable (no Apple Silicon backlit keyboard, bridge failed)
-      3   private-API probe failed: the CoreBrightness surface on this macOS build
-          does not match what Sublight was verified against; nothing was touched.
-          Only `help`, `sig`, and `dump` run without the probe, so the drift can
-          be inspected.
+        EXIT CODES:
+          0   success
+          1   usage error
+          2   backlight unavailable (no Apple Silicon backlit keyboard, bridge failed)
+          3   private-API probe failed: the CoreBrightness surface on this macOS build
+              does not match what Sublight was verified against; nothing was touched.
+              Only `help`, `sig`, and `dump` run without the probe, so the drift can
+              be inspected.
 
-    SAFETY: every mode flickers the backlight in the 3-30 Hz photosensitive band.
-    Read SAFETY.md before using this on anyone but yourself.
+        SAFETY: every mode flickers the backlight in the 3-30 Hz photosensitive band.
+        Read SAFETY.md before using this on anyone but yourself.
 
-    All numbers are normalized 0..1. Start with `dump`, then `sig`, then `probe`.
-    Every long-running command restores the backlight on Ctrl-C, SIGTERM, and SIGHUP;
-    a crash leaves a dirty flag that the next launch of the app or CLI heals.
-    """)
+        All numbers are normalized 0..1. Start with `dump`, then `sig`, then `probe`.
+        Every long-running command restores the backlight on Ctrl-C, SIGTERM, and SIGHUP;
+        a crash leaves a dirty flag that the next launch of the app or CLI heals.
+        """)
 }
 
 func parseFloat(_ s: String?) -> Float? {
@@ -127,7 +128,9 @@ func parseFloat(_ s: String?) -> Float? {
 }
 
 func flagValue(_ args: [String], _ flag: String) -> String? {
-    guard let i = args.firstIndex(of: flag), args.indices.contains(i + 1) else { return nil }
+    guard let i = args.firstIndex(of: flag), args.indices.contains(i + 1) else {
+        return nil
+    }
     return args[i + 1]
 }
 
@@ -162,10 +165,11 @@ func marker(_ label: String, extra: String = "") -> String {
     let now = Date()
     let iso = ISO8601DateFormatter()
     iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    return String(format: "%@  epoch=%.3f  wall=%@  uptime_ms=%.3f%@",
-                  label, now.timeIntervalSince1970, iso.string(from: now),
-                  Double(DispatchTime.now().uptimeNanoseconds) / 1e6,
-                  extra.isEmpty ? "" : "  " + extra)
+    return String(
+        format: "%@  epoch=%.3f  wall=%@  uptime_ms=%.3f%@",
+        label, now.timeIntervalSince1970, iso.string(from: now),
+        Double(DispatchTime.now().uptimeNanoseconds) / 1e6,
+        extra.isEmpty ? "" : "  " + extra)
 }
 
 /// nil = present but invalid; .some(nil) = absent; .some(.some) = a finite value.
@@ -232,7 +236,9 @@ final class ReadbackSampler: @unchecked Sendable {
     func start(hz: Double) {
         let t = DispatchSource.makeTimerSource(flags: .strict, queue: EngineQueue.queue)
         t.setEventHandler { [weak self] in self?.sample() }
-        t.schedule(deadline: .now(), repeating: .nanoseconds(Int(1e9 / hz)), leeway: .milliseconds(1))
+        t.schedule(
+            deadline: .now(), repeating: .nanoseconds(Int(1e9 / hz)),
+            leeway: .milliseconds(1))
         t.resume()
         timer = t
     }
@@ -246,13 +252,15 @@ final class ReadbackSampler: @unchecked Sendable {
         let bl = controller.bridge.backlightLevel(controller.keyboardID)
         let t2 = DispatchTime.now().uptimeNanoseconds
         let last = EngineDiagnostics.shared.lastCommand()
-        rows.append(Row(atNanos: now,
-                        brightness: b,
-                        backlightLevel: bl,
-                        brightnessRtMs: Double(t1 &- t0) / 1e6,
-                        backlightRtMs: Double(t2 &- t1) / 1e6,
-                        lastValue: last?.value,
-                        sinceLastCmdMs: last.map { Double(now &- $0.atNanos) / 1e6 }))
+        rows.append(
+            Row(
+                atNanos: now,
+                brightness: b,
+                backlightLevel: bl,
+                brightnessRtMs: Double(t1 &- t0) / 1e6,
+                backlightRtMs: Double(t2 &- t1) / 1e6,
+                lastValue: last?.value,
+                sinceLastCmdMs: last.map { Double(now &- $0.atNanos) / 1e6 }))
     }
 
     /// Stop and drain. The rows are only safe to read after this returns.
@@ -262,15 +270,19 @@ final class ReadbackSampler: @unchecked Sendable {
     }
 
     static func csv(_ rows: [Row], relativeTo t0: UInt64) -> String {
-        var out = ["t_ms,brightness,backlight_level,b_rt_ms,bl_rt_ms,last_cmd,since_last_cmd_ms"]
+        var out = [
+            "t_ms,brightness,backlight_level,b_rt_ms,bl_rt_ms,last_cmd,since_last_cmd_ms"
+        ]
         for r in rows {
-            out.append(String(format: "%.3f,%@,%@,%.4f,%.4f,%@,%@",
-                              Double(r.atNanos &- t0) / 1e6,
-                              r.brightness.map { String(format: "%.6f", $0) } ?? "",
-                              r.backlightLevel.map { String(format: "%.6f", $0) } ?? "",
-                              r.brightnessRtMs, r.backlightRtMs,
-                              r.lastValue.map { String(format: "%.6f", $0) } ?? "",
-                              r.sinceLastCmdMs.map { String(format: "%.3f", $0) } ?? ""))
+            out.append(
+                String(
+                    format: "%.3f,%@,%@,%.4f,%.4f,%@,%@",
+                    Double(r.atNanos &- t0) / 1e6,
+                    r.brightness.map { String(format: "%.6f", $0) } ?? "",
+                    r.backlightLevel.map { String(format: "%.6f", $0) } ?? "",
+                    r.brightnessRtMs, r.backlightRtMs,
+                    r.lastValue.map { String(format: "%.6f", $0) } ?? "",
+                    r.sinceLastCmdMs.map { String(format: "%.3f", $0) } ?? ""))
         }
         return out.joined(separator: "\n") + "\n"
     }
@@ -312,10 +324,12 @@ func makeController(args: [String]) -> BacklightController? {
         // BEFORE any frequency assignment, or the assignment clamps first.
         if args.contains("--allow-unstable") {
             controller.allowsUnstableFrequency = true
-            fputs("warning: --allow-unstable lifts the measured "
-                  + String(format: "%.1f", DitherEngine.maxStableFrequencyHz)
-                  + " Hz stability ceiling. Above it the daemon stops honouring the dither"
-                  + " and the keys fall dark for seconds at a time. Research use only.\n", stderr)
+            fputs(
+                "warning: --allow-unstable lifts the measured "
+                    + String(format: "%.1f", DitherEngine.maxStableFrequencyHz)
+                    + " Hz stability ceiling. Above it the daemon stops honouring the dither"
+                    + " and the keys fall dark for seconds at a time. Research use only.\n",
+                stderr)
         }
         if let period { controller.period = period }
         if let freq { controller.frequencyHz = freq }
@@ -325,13 +339,17 @@ func makeController(args: [String]) -> BacklightController? {
         if apiVerified {
             let recovery = controller.recoverFromCrashIfNeeded()
             if recovery != .clean {
-                fputs("note: previous run did not restore cleanly (\(recovery)) — backlight restored\n", stderr)
+                fputs(
+                    "note: previous run did not restore cleanly (\(recovery)) — backlight restored\n",
+                    stderr)
             }
         }
         return controller
     } catch {
         fputs("error: \(error)\n", stderr)
-        fputs("hint: this tool requires an Apple Silicon MacBook with a backlit keyboard.\n", stderr)
+        fputs(
+            "hint: this tool requires an Apple Silicon MacBook with a backlit keyboard.\n",
+            stderr)
         return nil
     }
 }
@@ -349,7 +367,7 @@ func bothReadbacks(_ c: BacklightController) -> (Float?, Float?) {
 
 func phaseSignatures(_ c: BacklightController) {
     banner("Phase 0 — signatures (verify types before believing fade results)")
-    let sel = APISurface.expectedEncodings[0].selector   // the fade setter
+    let sel = APISurface.expectedEncodings[0].selector  // the fade setter
     let report = validateAPISurface()
     if let enc = report.observed[sel] ?? nil {
         print("  \(sel)")
@@ -363,7 +381,9 @@ func phaseSignatures(_ c: BacklightController) {
         print("  \(sel)\n      (absent — fade experiment will be skipped)")
     }
     if c.bridge.backlightLevel(c.keyboardID) == nil {
-        print("  note: backlightLevelForKeyboard: returned nil — only one read-back available.")
+        print(
+            "  note: backlightLevelForKeyboard: returned nil — only one read-back available."
+        )
     }
 }
 
@@ -387,13 +407,17 @@ func phaseClampSweep(_ c: BacklightController) {
     banner("Phase 2 — plain-set clamp sweep (find the REAL floor)")
     print("  WATCH THE KEYS each row. Looking for the lowest visibly-distinct value,")
     print("  and whether anything below \(fmt(c.floor)) is honored at all.\n")
-    let sweep: [Float] = [0.0, 0.005, 0.01, 0.02, 0.03, 0.04, 0.05, c.floor, 0.08, 0.10, 0.12, 0.25]
+    let sweep: [Float] = [
+        0.0, 0.005, 0.01, 0.02, 0.03, 0.04, 0.05, c.floor, 0.08, 0.10, 0.12, 0.25,
+    ]
     print("  commanded   ok    brightness  backlightLevel")
     for v in sweep {
         let ok = c.bridge.setBrightness(v, c.keyboardID)
         Thread.sleep(forTimeInterval: 1.0)
         let (b, bl) = bothReadbacks(c)
-        print(String(format: "    %.4f    %@   %@    %@", v, ok ? "y" : "N", fmt(b), fmt(bl)))
+        print(
+            String(
+                format: "    %.4f    %@   %@    %@", v, ok ? "y" : "N", fmt(b), fmt(bl)))
     }
 }
 
@@ -406,7 +430,8 @@ func phaseFade(_ c: BacklightController) {
     print("  For each row: fade-set a SUB-FLOOR value, wait 2.5 s, WATCH THE KEYS.")
     print("  Question: does the LED sit visibly BELOW the system minimum and stay there,")
     print("  with no flicker? If yes for any row, the dither engine may be unnecessary.")
-    print("  fadeSpeed is an int enum (verified via sig); 0 is likely 'instant/no fade'.\n")
+    print(
+        "  fadeSpeed is an int enum (verified via sig); 0 is likely 'instant/no fade'.\n")
     let target: Float = 0.03
     // (fadeSpeed enum candidate, commit). We don't know the enum's meaning yet,
     // so we sweep the low integers; 0 with commit=true is the prime suspect for
@@ -420,8 +445,10 @@ func phaseFade(_ c: BacklightController) {
         let ok = c.bridge.setBrightness(target, fadeSpeed: fs, commit: cm, c.keyboardID)
         Thread.sleep(forTimeInterval: 2.5)
         let (b, bl) = bothReadbacks(c)
-        print(String(format: "    %.3f    %5d      %@      %@    %@    %@",
-                     target, fs, cm ? "yes" : "no ", ok ? "y" : "N", fmt(b), fmt(bl)))
+        print(
+            String(
+                format: "    %.3f    %5d      %@      %@    %@    %@",
+                target, fs, cm ? "yes" : "no ", ok ? "y" : "N", fmt(b), fmt(bl)))
     }
     // One deeper probe with the prime-suspect combo.
     print("  … deeper: target 0.015, fadeSpeed 0, commit yes")
@@ -468,7 +495,7 @@ func phaseRamp(_ c: BacklightController) {
 func spinWait(_ nanos: UInt64) {
     if nanos == 0 { return }
     let deadline = DispatchTime.now().uptimeNanoseconds &+ nanos
-    while DispatchTime.now().uptimeNanoseconds < deadline { }
+    while DispatchTime.now().uptimeNanoseconds < deadline {}
 }
 
 /// Hammer floor↔0 with NO pacing to find the raw ceiling the API+daemon allow.
@@ -487,7 +514,9 @@ func rawCeiling(_ c: BacklightController, floor: Float, seconds: Double) -> Doub
 
 /// Paced toggle at a target cycle frequency and duty. Returns achieved cycles/sec
 /// (if far below the request, the setBrightness call latency is the bottleneck).
-func runPaced(_ c: BacklightController, freq: Double, duty: Double, seconds: Double, floor: Float) -> Double {
+func runPaced(
+    _ c: BacklightController, freq: Double, duty: Double, seconds: Double, floor: Float
+) -> Double {
     let id = c.keyboardID
     let highNs = UInt64(max(0.0, duty) / freq * 1e9)
     let lowNs = UInt64(max(0.0, 1.0 - duty) / freq * 1e9)
@@ -506,7 +535,9 @@ func runPaced(_ c: BacklightController, freq: Double, duty: Double, seconds: Dou
 /// Slow-band toggle using Thread.sleep (no CPU spin — phases are 12–250 ms, so
 /// millisecond sleep accuracy is plenty). This is the fade-riding regime: slow
 /// enough that the daemon acts on every command, so any hardware fade shows up.
-func runSlow(_ c: BacklightController, freq: Double, duty: Double, seconds: Double, floor: Float) -> Double {
+func runSlow(
+    _ c: BacklightController, freq: Double, duty: Double, seconds: Double, floor: Float
+) -> Double {
     let id = c.keyboardID
     let highS = max(0.0, duty) / freq
     let lowS = max(0.0, 1.0 - duty) / freq
@@ -546,11 +577,16 @@ guard let command = args.first else {
 // command the backlight, and they are how a failing probe gets diagnosed.
 // `glyph` joins the exempt list: it draws pictures and never speaks to the
 // daemon, so it must not require a verified private-API surface to run.
-if !["help", "--help", "-h", "version", "--version", "-V", "sig", "signatures", "dump", "glyph", "social-preview"].contains(command) {
+if ![
+    "help", "--help", "-h", "version", "--version", "-V", "sig", "signatures", "dump",
+    "glyph", "social-preview",
+].contains(command) {
     let report = validateAPISurface()
     if !report.passed {
         fputs(report.text + "\n", stderr)
-        fputs("Refusing to drive the backlight on an unverified API surface. Please file an issue with the report above.\n", stderr)
+        fputs(
+            "Refusing to drive the backlight on an unverified API surface. Please file an issue with the report above.\n",
+            stderr)
         exit(3)
     }
     apiVerified = true
@@ -566,7 +602,9 @@ let mutatingCommands: Set<String> = [
     "notify-probe", "restore",
 ]
 if mutatingCommands.contains(command), !ConsentMarker().isGranted {
-    fputs("notice: Sublight dims by flickering the backlight at 3-8 Hz; every mode is visible flicker and can trigger seizures in people with photosensitive epilepsy. Read SAFETY.md before continuing.\n", stderr)
+    fputs(
+        "notice: Sublight dims by flickering the backlight at 3-8 Hz; every mode is visible flicker and can trigger seizures in people with photosensitive epilepsy. Read SAFETY.md before continuing.\n",
+        stderr)
 }
 
 switch command {
@@ -582,7 +620,9 @@ case "version", "--version", "-V":
 case "status":
     guard let c = makeController(args: args) else { exit(2) }
     print("keyboard id      : \(c.keyboardID)")
-    print("reported level   : \(c.reportedBrightness().map { String(format: "%.4f", $0) } ?? "unavailable")")
+    print(
+        "reported level   : \(c.reportedBrightness().map { String(format: "%.4f", $0) } ?? "unavailable")"
+    )
     if let auto = c.bridge.isAutoBrightnessEnabled(c.keyboardID) {
         print("auto-brightness  : \(auto ? "on" : "off")")
     } else {
@@ -601,7 +641,9 @@ case "status":
     if let last = DiagnosticsStore.load() {
         let iso = ISO8601DateFormatter()
         print("\nlast recorded run: \(last.label)")
-        print("  recorded \(iso.string(from: last.recordedAt))  pid \(last.pid)  (\(DiagnosticsStore.defaultURL.path))")
+        print(
+            "  recorded \(iso.string(from: last.recordedAt))  pid \(last.pid)  (\(DiagnosticsStore.defaultURL.path))"
+        )
         print(last.counters.report())
     } else {
         print("\nlast recorded run: none (run `hold --seconds n` or `pair-sweep`)")
@@ -612,7 +654,9 @@ case "ids":
     guard let c = makeController(args: args) else { exit(2) }
     let ids = c.bridge.keyboardIDs()
     if ids.isEmpty {
-        print("copyKeyboardBacklightIDs returned nothing — using heuristic ID \(c.keyboardID)")
+        print(
+            "copyKeyboardBacklightIDs returned nothing — using heuristic ID \(c.keyboardID)"
+        )
     } else {
         for id in ids {
             print("id \(id)  builtIn=\(c.bridge.isBuiltIn(id))")
@@ -634,15 +678,22 @@ case "sig", "signatures":
     print(report.text)
     print("")
     print("True selector type encodings on THIS machine.")
-    print("The fade setter is built for: brightness=float, fadeSpeed=int (enum), commit=BOOL,")
+    print(
+        "The fade setter is built for: brightness=float, fadeSpeed=int (enum), commit=BOOL,"
+    )
     print("keyboardID=unsigned long long. Any mismatch above means the signature changed")
-    print("on your build — file an issue with this output before running the fade phase.\n")
-    let decoder = try? KeyboardBrightnessBridge()   // decode is a pure string helper
+    print(
+        "on your build — file an issue with this output before running the fade phase.\n")
+    let decoder = try? KeyboardBrightnessBridge()  // decode is a pure string helper
     for s in APISurface.introspectionSelectors {
         if let enc = report.observed[s] ?? nil {
             print("  \(s)")
             print("      raw : \(enc)")
-            if let d = decoder { print("      read: \(d.decodeSignature(enc))\n") } else { print("") }
+            if let d = decoder {
+                print("      read: \(d.decodeSignature(enc))\n")
+            } else {
+                print("")
+            }
         } else {
             print("  \(s)\n      (absent on this machine)\n")
         }
@@ -659,7 +710,8 @@ case "get":
     exit(2)
 
 case "set":
-    guard let value = parseFloat(args.count > 1 ? args[1] : nil), (0...1).contains(value) else {
+    guard let value = parseFloat(args.count > 1 ? args[1] : nil), (0...1).contains(value)
+    else {
         fputs("usage: sublight-cli set <0..1>\n", stderr)
         exit(1)
     }
@@ -668,13 +720,16 @@ case "set":
     // override a commanded value within milliseconds — silently invalidating
     // a visual measurement.
     if c.bridge.isAutoBrightnessEnabled(c.keyboardID) == true {
-        fputs("warning: auto-brightness is ON — the ambient light sensor may override this value within milliseconds; run 'auto off' first for visual tests\n", stderr)
+        fputs(
+            "warning: auto-brightness is ON — the ambient light sensor may override this value within milliseconds; run 'auto off' first for visual tests\n",
+            stderr)
     }
     let ok = c.bridge.setBrightness(value, c.keyboardID)
-    Thread.sleep(forTimeInterval: 0.5) // let the fade land
+    Thread.sleep(forTimeInterval: 0.5)  // let the fade land
     let after = c.reportedBrightness().map { String(format: "%.4f", $0) } ?? "?"
     print("commanded \(String(format: "%.4f", value))  ok=\(ok)  read-back=\(after)")
-    print("(read-back may echo the request even if the hardware clamped — trust your eyes)")
+    print(
+        "(read-back may echo the request even if the hardware clamped — trust your eyes)")
     exit(ok ? 0 : 2)
 
 case "auto":
@@ -689,7 +744,7 @@ case "auto":
 
 case "probe":
     guard let c = makeController(args: args) else { exit(2) }
-    installRestoreOnSignal(c)   // disables auto-brightness below; restore on Ctrl-C
+    installRestoreOnSignal(c)  // disables auto-brightness below; restore on Ctrl-C
     print("=== Sublight comprehensive probe ===")
     print("Dim room, other keyboard tools quit. Your EYES are the instrument —")
     print("the read-back columns can lie (SPEC §6.4). If the light gets stuck,")
@@ -732,7 +787,7 @@ case "probe":
 
 case "dither-test":
     guard let c = makeController(args: args) else { exit(2) }
-    installRestoreOnSignal(c)   // forces auto-brightness off below; restore on Ctrl-C
+    installRestoreOnSignal(c)  // forces auto-brightness off below; restore on Ctrl-C
     let floor = c.floor
     let duty = parseFloat(flagValue(args, "--duty")).map { Double($0) } ?? 0.5
 
@@ -745,13 +800,21 @@ case "dither-test":
 
     // Auto-brightness OFF for a clean test — it was the flicker source earlier.
     let savedAuto = c.bridge.isAutoBrightnessEnabled(c.keyboardID)
-    if c.bridge.supportsAutoBrightnessControl { c.bridge.setAutoBrightness(false, c.keyboardID) }
-    print("auto-brightness: " + (savedAuto.map { $0 ? "was on → forced off" : "already off" } ?? "n/a") + "\n")
+    if c.bridge.supportsAutoBrightnessControl {
+        c.bridge.setAutoBrightness(false, c.keyboardID)
+    }
+    print(
+        "auto-brightness: "
+            + (savedAuto.map { $0 ? "was on → forced off" : "already off" } ?? "n/a")
+            + "\n")
 
     if args.contains("--slow") {
         print("Part S — SLOW band sweep (2–40 Hz), the fade-riding regime.")
-        print("  ⚠️  PHOTOSENSITIVITY: this flickers at 2–40 Hz, the range that can trigger")
-        print("      photosensitive seizures. Small peripheral light, so risk is low — but if")
+        print(
+            "  ⚠️  PHOTOSENSITIVITY: this flickers at 2–40 Hz, the range that can trigger")
+        print(
+            "      photosensitive seizures. Small peripheral light, so risk is low — but if"
+        )
         print("      you have ANY photosensitivity, abort now.")
         print("  For EACH frequency, watch the keys and note:")
         print("    • transition — does it SNAP hard between min and off, or FADE softly?")
@@ -771,7 +834,9 @@ case "dither-test":
             c.bridge.setBrightness(floor, c.keyboardID)
             Thread.sleep(forTimeInterval: 0.8)
         }
-        if let s = savedAuto, c.bridge.supportsAutoBrightnessControl { c.bridge.setAutoBrightness(s, c.keyboardID) }
+        if let s = savedAuto, c.bridge.supportsAutoBrightnessControl {
+            c.bridge.setAutoBrightness(s, c.keyboardID)
+        }
         c.bridge.setBrightness(0.3, c.keyboardID)
         print("Restored: auto-brightness reset, brightness 0.30.")
         print("Report — especially for 2–5 Hz: SNAP or FADE on each transition? And did")
@@ -784,7 +849,9 @@ case "dither-test":
         print("  ⚠️  Still flickers in the photosensitive range — abort now if sensitive.")
         print("  At each frequency you see the FLOOR, then the dither. The ONLY question")
         print("  that matters: is the dither CLEARLY dimmer than the floor, or the same?")
-        print("  (Same brightness but steady = coalescing, not a win. Dimmer = the real thing.)\n")
+        print(
+            "  (Same brightness but steady = coalescing, not a win. Dimmer = the real thing.)\n"
+        )
         for n in stride(from: 5, through: 1, by: -1) {
             print("  starting in \(n) …  (Ctrl-C to abort)")
             Thread.sleep(forTimeInterval: 1.0)
@@ -796,25 +863,36 @@ case "dither-test":
             print("    FLOOR (2.5 s) — fix this brightness in your eye…")
             c.bridge.setBrightness(floor, c.keyboardID)
             Thread.sleep(forTimeInterval: 2.5)
-            print("    DITHER (5 s) — dimmer than that floor? and steady or still pulsing?")
+            print(
+                "    DITHER (5 s) — dimmer than that floor? and steady or still pulsing?")
             let ach = runSlow(c, freq: f, duty: duty, seconds: 5.0, floor: floor)
             print(String(format: "      (achieved ~%.0f Hz)\n", ach))
             c.bridge.setBrightness(floor, c.keyboardID)
             Thread.sleep(forTimeInterval: 0.8)
         }
-        if let s = savedAuto, c.bridge.supportsAutoBrightnessControl { c.bridge.setAutoBrightness(s, c.keyboardID) }
+        if let s = savedAuto, c.bridge.supportsAutoBrightnessControl {
+            c.bridge.setAutoBrightness(s, c.keyboardID)
+        }
         c.bridge.setBrightness(0.3, c.keyboardID)
         print("Restored: auto-brightness reset, brightness 0.30.")
         print("Report per frequency: DIMMER than floor, or same? And steady or pulsing?")
-        print("The winner is any frequency that is BOTH steady AND clearly dimmer than the floor.")
+        print(
+            "The winner is any frequency that is BOTH steady AND clearly dimmer than the floor."
+        )
         exit(0)
     }
 
     // Part A — raw ceiling.
-    print("Part A — raw ceiling: hammering floor<->0 as fast as the API allows for 1.5 s.")
-    print("  WATCH: a fast shimmer or steady glow = promising; chunky blinking = ceiling too low.")
+    print(
+        "Part A — raw ceiling: hammering floor<->0 as fast as the API allows for 1.5 s.")
+    print(
+        "  WATCH: a fast shimmer or steady glow = promising; chunky blinking = ceiling too low."
+    )
     let cyc = rawCeiling(c, floor: floor, seconds: 1.5)
-    print(String(format: "  → ~%.0f cycles/sec  (%.0f setBrightness calls/sec)\n", cyc, cyc * 2))
+    print(
+        String(
+            format: "  → ~%.0f cycles/sec  (%.0f setBrightness calls/sec)\n", cyc, cyc * 2
+        ))
     c.bridge.setBrightness(floor, c.keyboardID)
     Thread.sleep(forTimeInterval: 1.0)
 
@@ -826,7 +904,11 @@ case "dither-test":
         let candidates = [60.0, 90.0, 120.0, 180.0, 240.0]
         let ladder = candidates.filter { $0 <= cyc * 0.8 }
         let tested = ladder.isEmpty ? [min(cyc * 0.8, 60.0)] : ladder
-        print(String(format: "Part B — paced ladder at duty %.2f (target ≈ %.0f%% of floor brightness).", duty, duty * 100))
+        print(
+            String(
+                format:
+                    "Part B — paced ladder at duty %.2f (target ≈ %.0f%% of floor brightness).",
+                duty, duty * 100))
         print("  Each runs 4 s. For each, judge TWO things:")
         print("    (1) flicker — rock-steady, or visibly strobing/shimmering?")
         print("    (2) dimness — clearly dimmer than the floor, or no different?\n")
@@ -840,10 +922,14 @@ case "dither-test":
     }
 
     // Restore.
-    if let s = savedAuto, c.bridge.supportsAutoBrightnessControl { c.bridge.setAutoBrightness(s, c.keyboardID) }
+    if let s = savedAuto, c.bridge.supportsAutoBrightnessControl {
+        c.bridge.setAutoBrightness(s, c.keyboardID)
+    }
     c.bridge.setBrightness(0.3, c.keyboardID)
     print("Restored: auto-brightness reset, brightness 0.30.")
-    print("Report, per frequency: did it hold STEADY (fused), and was it DIMMER than the floor?")
+    print(
+        "Report, per frequency: did it hold STEADY (fused), and was it DIMMER than the floor?"
+    )
     exit(0)
 
 case "hold":
@@ -853,7 +939,9 @@ case "hold":
     }
     let levelArg = parseFloat(args.count > 1 ? args[1] : nil)
     if dutyFlag == nil, levelArg == nil || !(0...1).contains(levelArg!) {
-        fputs("usage: sublight-cli hold <0..1> [--floor f] [--period s | --freq hz] [--duty d]\n", stderr)
+        fputs(
+            "usage: sublight-cli hold <0..1> [--floor f] [--period s | --freq hz] [--duty d]\n",
+            stderr)
         fputs("       with --duty, <level> is optional: level = duty x floor\n", stderr)
         exit(1)
     }
@@ -875,20 +963,28 @@ case "hold":
     // is driven through exactly the same setLevel path either way.
     let value = dutyFlag.map { Float($0) * c.floor } ?? levelArg!
 
-    print("Holding level \(String(format: "%.4f", value)) (floor \(String(format: "%.4f", c.floor)), period \(c.period)s).")
+    print(
+        "Holding level \(String(format: "%.4f", value)) (floor \(String(format: "%.4f", c.floor)), period \(c.period)s)."
+    )
     if value < c.floor && value > 0 {
-        print("Sub-minimum zone → dither engine active. Watch for flicker; tune --period.")
+        print(
+            "Sub-minimum zone → dither engine active. Watch for flicker; tune --period.")
     } else {
         print("At/above floor (or zero) → plain direct set, no dithering.")
     }
-    if seconds == nil { print("Ctrl-C restores auto-brightness and lands at the floor.\n") }
+    if seconds == nil {
+        print("Ctrl-C restores auto-brightness and lands at the floor.\n")
+    }
 
     installRestoreOnSignal(c, level: max(c.floor, 0.2))
 
     if let padOffset {
         c.bridge.writePadding = padOffset
-        print(String(format: "write padding: ON (+%.4f, padded value sent first) — every edge is TWO commands",
-                     padOffset))
+        print(
+            String(
+                format:
+                    "write padding: ON (+%.4f, padded value sent first) — every edge is TWO commands",
+                padOffset))
     }
 
     // Bracket the measurement: zero the tally on the engine queue, so it is
@@ -904,16 +1000,22 @@ case "hold":
         let s = ReadbackSampler(c)
         s.start(hz: sampleHz)
         sampler = s
-        print(String(format: "read-back sampling: %.1f Hz on the engine queue (both getters per sample)", sampleHz))
+        print(
+            String(
+                format:
+                    "read-back sampling: %.1f Hz on the engine queue (both getters per sample)",
+                sampleHz))
     }
 
     // A no-op hop drains the queue behind setLevel's async start, so the state
     // read below is the settled one.
-    EngineQueue.run { }
+    EngineQueue.run {}
     let resolved = c.engine.state
     if case .running(let hz, let duty) = resolved {
-        print(String(format: "engine: %.4f Hz  duty %.4f  period %.2f ms  ON window %.2f ms",
-                     hz, duty, 1000.0 / hz, duty * 1000.0 / hz))
+        print(
+            String(
+                format: "engine: %.4f Hz  duty %.4f  period %.2f ms  ON window %.2f ms",
+                hz, duty, 1000.0 / hz, duty * 1000.0 / hz))
     } else {
         print("engine: stopped (direct set path)")
     }
@@ -935,9 +1037,10 @@ case "hold":
             print(snap.report())
 
             if let rows = sampledRows {
-                let csvPath = flagValue(args, "--sample-csv")
+                let csvPath =
+                    flagValue(args, "--sample-csv")
                     ?? DiagnosticsStore.defaultURL.deletingLastPathComponent()
-                        .appendingPathComponent("readback.csv").path
+                    .appendingPathComponent("readback.csv").path
                 let text = ReadbackSampler.csv(rows, relativeTo: holdStartNanos)
                 try? FileManager.default.createDirectory(
                     at: URL(fileURLWithPath: csvPath).deletingLastPathComponent(),
@@ -945,28 +1048,38 @@ case "hold":
                 try? text.write(toFile: csvPath, atomically: true, encoding: .utf8)
                 let bOK = rows.compactMap(\.brightness)
                 let blOK = rows.compactMap(\.backlightLevel)
-                print(String(format: "  read-back samples: %d  (brightness n=%d, backlightLevel n=%d)",
-                             rows.count, bOK.count, blOK.count))
+                print(
+                    String(
+                        format:
+                            "  read-back samples: %d  (brightness n=%d, backlightLevel n=%d)",
+                        rows.count, bOK.count, blOK.count))
                 func spread(_ label: String, _ vs: [Float]) {
                     guard !vs.isEmpty else { print("  \(label): no values"); return }
                     let uniq = Set(vs.map { String(format: "%.6f", $0) }).sorted()
-                    print(String(format: "  %@: min %.6f  max %.6f  distinct %d %@",
-                                 label, vs.min()!, vs.max()!, uniq.count,
-                                 uniq.count <= 6 ? "-> " + uniq.joined(separator: ", ") : ""))
+                    print(
+                        String(
+                            format: "  %@: min %.6f  max %.6f  distinct %d %@",
+                            label, vs.min()!, vs.max()!, uniq.count,
+                            uniq.count <= 6 ? "-> " + uniq.joined(separator: ", ") : ""))
                 }
                 spread("brightnessForKeyboard:   ", bOK)
                 spread("backlightLevelForKeyboard:", blOK)
                 let bRt = rows.map(\.brightnessRtMs).sorted()
                 let blRt = rows.map(\.backlightRtMs).sorted()
                 if !bRt.isEmpty {
-                    print(String(format: "  getter round trip ms: brightness p50 %.4f max %.4f | backlightLevel p50 %.4f max %.4f",
-                                 bRt[bRt.count / 2], bRt.last!, blRt[blRt.count / 2], blRt.last!))
+                    print(
+                        String(
+                            format:
+                                "  getter round trip ms: brightness p50 %.4f max %.4f | backlightLevel p50 %.4f max %.4f",
+                            bRt[bRt.count / 2], bRt.last!, blRt[blRt.count / 2],
+                            blRt.last!))
                 }
                 print("  csv: \(csvPath)")
             }
             var label = String(format: "hold %.4f", value)
             if case .running(let hz, let duty) = resolved {
-                label = String(format: "hold %.3f Hz duty %.3f for %.0f s", hz, duty, seconds)
+                label = String(
+                    format: "hold %.3f Hz duty %.3f for %.0f s", hz, duty, seconds)
             }
             if DiagnosticsStore.save(DiagnosticsRecord(label: label, counters: snap)) {
                 print("saved: \(DiagnosticsStore.defaultURL.path)")
@@ -983,8 +1096,12 @@ case "pair-sweep":
     // invocation, because the verdict on each is a HUMAN visual observation and
     // those cannot be batched.
     guard let c = makeController(args: args) else { exit(2) }
-    guard let onMsRaw = flagValue(args, "--on-ms"), let onMs = Double(onMsRaw), onMs.isFinite, onMs > 0 else {
-        fputs("usage: sublight-cli pair-sweep --on-ms <X> [--off-ms 400] [--seconds 4] [--fade <int>] [--floor f]\n", stderr)
+    guard let onMsRaw = flagValue(args, "--on-ms"), let onMs = Double(onMsRaw),
+        onMs.isFinite, onMs > 0
+    else {
+        fputs(
+            "usage: sublight-cli pair-sweep --on-ms <X> [--off-ms 400] [--seconds 4] [--fade <int>] [--floor f]\n",
+            stderr)
         exit(1)
     }
     let offMs = flagValue(args, "--off-ms").flatMap { Double($0) } ?? 400
@@ -1004,7 +1121,9 @@ case "pair-sweep":
             exit(1)
         }
         if !c.bridge.supportsFadeControl {
-            fputs("error: setBrightness:fadeSpeed:commit: is absent on this build\n", stderr)
+            fputs(
+                "error: setBrightness:fadeSpeed:commit: is absent on this build\n", stderr
+            )
             exit(2)
         }
         fadeSpeed = v
@@ -1015,13 +1134,19 @@ case "pair-sweep":
     // hard kill mid-sweep cannot leave the ALS suppressed with no marker.
     c.armCrashRecovery()
 
-    let setter = fadeSpeed.map { "setBrightness:fadeSpeed:commit: fadeSpeed=\($0) commit=true" }
+    let setter =
+        fadeSpeed.map { "setBrightness:fadeSpeed:commit: fadeSpeed=\($0) commit=true" }
         ?? "setBrightness:forKeyboard: (the setter the ENGINE uses — daemon default fade)"
     print("=== pair-sweep (engine bypassed) ===")
-    print(String(format: "ON window %.1f ms at level %.4f, OFF gap %.1f ms, for %.1f s (~%.0f cycles)",
-                 onMs, c.floor, offMs, sweepSeconds, sweepSeconds / ((onMs + offMs) / 1000.0)))
+    print(
+        String(
+            format:
+                "ON window %.1f ms at level %.4f, OFF gap %.1f ms, for %.1f s (~%.0f cycles)",
+            onMs, c.floor, offMs, sweepSeconds, sweepSeconds / ((onMs + offMs) / 1000.0)))
     print("setter: \(setter)")
-    print("⚠️  This blinks the keyboard backlight. WATCH THE KEYS — the verdict is visual.\n")
+    print(
+        "⚠️  This blinks the keyboard backlight. WATCH THE KEYS — the verdict is visual.\n"
+    )
 
     // Same suppression the engine asserts, so the ALS and the idle dimmer are
     // not competing with the measurement.
@@ -1044,7 +1169,12 @@ case "pair-sweep":
     let sweepEnd = Date().addingTimeInterval(sweepSeconds)
     var spacings: [Double] = []
     var cycles = 0
-    print(marker("STEP START", extra: String(format: "on_ms=%.1f fade=%@", onMs, fadeSpeed.map(String.init) ?? "default")))
+    print(
+        marker(
+            "STEP START",
+            extra: String(
+                format: "on_ms=%.1f fade=%@", onMs,
+                fadeSpeed.map(String.init) ?? "default")))
     while Date() < sweepEnd {
         let tOn = sweepSet(c.floor)
         spinWait(onNanos)
@@ -1058,12 +1188,17 @@ case "pair-sweep":
     let snap = EngineDiagnostics.shared.snapshot()
     let sorted = spacings.sorted()
     if !sorted.isEmpty {
-        print(String(format: "\n  achieved ON->OFF command spacing: min %.3f  p50 %.3f  max %.3f ms  (requested %.1f ms, n=%d)",
-                     sorted.first!, sorted[sorted.count / 2], sorted.last!, onMs, sorted.count))
+        print(
+            String(
+                format:
+                    "\n  achieved ON->OFF command spacing: min %.3f  p50 %.3f  max %.3f ms  (requested %.1f ms, n=%d)",
+                sorted.first!, sorted[sorted.count / 2], sorted.last!, onMs, sorted.count)
+        )
     }
     print(snap.report())
-    let sweepLabel = String(format: "pair-sweep on=%.1fms off=%.1fms fade=%@",
-                            onMs, offMs, fadeSpeed.map(String.init) ?? "default")
+    let sweepLabel = String(
+        format: "pair-sweep on=%.1fms off=%.1fms fade=%@",
+        onMs, offMs, fadeSpeed.map(String.init) ?? "default")
     if DiagnosticsStore.save(DiagnosticsRecord(label: sweepLabel, counters: snap)) {
         print("saved: \(DiagnosticsStore.defaultURL.path)")
     }
@@ -1079,11 +1214,15 @@ case "pulse":
     // now clamps it regardless. These are NOT the theta/alpha/beta spread;
     // they're a low-band gradient, and any neurological effect is unproven.
     // Named for a subjective low→high feel.
-    let presets: [String: Double] = ["low": 5.0, "medium": 6.0,
-                                     "high": DitherEngine.maxStableFrequencyHz]
+    let presets: [String: Double] = [
+        "low": 5.0, "medium": 6.0,
+        "high": DitherEngine.maxStableFrequencyHz,
+    ]
     guard let freq = presets[modeArg.lowercased()] else {
         fputs("usage: sublight-cli pulse <low|medium|high> [--duty d]\n", stderr)
-        fputs("  low ≈ 5 Hz,  medium ≈ 6 Hz,  high ≈ 8 Hz — the band this hardware can flicker.\n", stderr)
+        fputs(
+            "  low ≈ 5 Hz,  medium ≈ 6 Hz,  high ≈ 8 Hz — the band this hardware can flicker.\n",
+            stderr)
         exit(1)
     }
     guard let c = makeController(args: args) else { exit(2) }
@@ -1093,7 +1232,10 @@ case "pulse":
     print("⚠️  Experimental novelty. This flickers at \(freq) Hz — inside the")
     print("    photosensitive-seizure band. Any mood/focus effect is unproven.")
     print("    Keep it dim; don't run it if you're photosensitive.")
-    print(String(format: "duty %.2f → the light spends ~%.0f%% of each cycle at the floor.", duty, duty * 100))
+    print(
+        String(
+            format: "duty %.2f → the light spends ~%.0f%% of each cycle at the floor.",
+            duty, duty * 100))
     print("Ctrl-C stops and restores.\n")
 
     c.period = 1.0 / freq
@@ -1110,7 +1252,8 @@ case "notify-probe":
     let sel = APISurface.notificationSelector
     print("=== Notification probe (yield-to-manual spike) ===")
     print("Question: can the keyboard change-notification tell YOUR keypress apart")
-    print("from Sublight's own backlight writes? That decides how yield-to-manual works.\n")
+    print(
+        "from Sublight's own backlight writes? That decides how yield-to-manual works.\n")
 
     // 1. Signature (learn the `keys` arg type; the block's internal sig stays opaque).
     if let enc = c.bridge.methodSignature(sel) {
@@ -1170,10 +1313,16 @@ case "notify-probe":
     print(String(format: "  your keypresses  : %d", phaseC))
     print("")
     print("How to read it:")
-    print("  • our≈0 but keypresses>0  → it distinguishes user input. Yield-to-manual is easy.")
-    print("  • our>0 (fires per write) → can't tell us apart by event alone; needs the block's")
+    print(
+        "  • our≈0 but keypresses>0  → it distinguishes user input. Yield-to-manual is easy."
+    )
+    print(
+        "  • our>0 (fires per write) → can't tell us apart by event alone; needs the block's"
+    )
     print("    args read (a further spike) or a different detection path.")
-    print("  • all≈0                   → nil keys was wrong / wrong mechanism; try other keys.")
+    print(
+        "  • all≈0                   → nil keys was wrong / wrong mechanism; try other keys."
+    )
     print("Report the three numbers.")
     exit(0)
 
@@ -1194,11 +1343,14 @@ case "social-preview":
     }
     do {
         let dir = URL(fileURLWithPath: (outPath as NSString).expandingTildeInPath)
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: dir, withIntermediateDirectories: true)
         let out = dir.appendingPathComponent(SocialPreview.fileName)
         try data.write(to: out, options: .atomic)
         print("  \(out.path)")
-        print("\nUpload manually: GitHub → repository Settings → General → Social preview → Edit.")
+        print(
+            "\nUpload manually: GitHub → repository Settings → General → Social preview → Edit."
+        )
         exit(0)
     } catch {
         fputs("error: \(error)\n", stderr)
@@ -1218,7 +1370,8 @@ case "glyph":
         let dir = URL(fileURLWithPath: (outPath as NSString).expandingTildeInPath)
         let written = try GlyphLegend.render(to: dir)
         for name in written { print("  \(dir.appendingPathComponent(name).path)") }
-        print("\n\(written.count) files. Only \(GlyphLegend.legendFileName) is committed —")
+        print(
+            "\n\(written.count) files. Only \(GlyphLegend.legendFileName) is committed —")
         print("the runtime glyph stays code-drawn; no PNG ships as an app resource.")
         exit(0)
     } catch {
@@ -1234,7 +1387,9 @@ case "restore":
         print("restored: auto-brightness on, level \(String(format: "%.2f", level))")
         exit(0)
     } else {
-        fputs("restore command was rejected by the daemon — try the keyboard brightness keys\n", stderr)
+        fputs(
+            "restore command was rejected by the daemon — try the keyboard brightness keys\n",
+            stderr)
         exit(2)
     }
 

@@ -136,15 +136,32 @@ public struct EngineCounters: Equatable, Codable {
         var out: [String] = []
         out.append(indent + "edge  scheduled     fired  executed   skipped coalesced")
         for (name, e) in [("HIGH", high), ("LOW ", low)] {
-            out.append(indent + String(format: "%@  %9llu %9llu %9llu %9llu %9llu",
-                                       name, e.scheduled, e.fired, e.executed, e.skipped, e.coalesced))
+            out.append(
+                indent
+                    + String(
+                        format: "%@  %9llu %9llu %9llu %9llu %9llu",
+                        name, e.scheduled, e.fired, e.executed, e.skipped, e.coalesced))
         }
-        out.append(indent + String(format: "err-dark skips: %llu   max lateness %.2f ms   threshold at last skip %.2f ms   longest burst %llu cycles",
-                                   high.skipped, skipMaxLatenessMs, skipLastThresholdMs, skipMaxRunLength))
-        out.append(indent + String(format: "longest gap between EXECUTED HIGH commands: %.1f ms   (nominal period %.1f ms, ON window %.2f ms)",
-                                   longestExecutedHighGapMs, nominalPeriodMs, nominalOnWindowMs))
-        out.append(indent + String(format: "daemon command latency: n=%llu  p50 %.3f ms  p95 %.3f ms  max %.3f ms  mean %.3f ms",
-                                   latency.count, latency.p50Ms, latency.p95Ms, latency.maxMs, latency.meanMs))
+        out.append(
+            indent
+                + String(
+                    format:
+                        "err-dark skips: %llu   max lateness %.2f ms   threshold at last skip %.2f ms   longest burst %llu cycles",
+                    high.skipped, skipMaxLatenessMs, skipLastThresholdMs, skipMaxRunLength
+                ))
+        out.append(
+            indent
+                + String(
+                    format:
+                        "longest gap between EXECUTED HIGH commands: %.1f ms   (nominal period %.1f ms, ON window %.2f ms)",
+                    longestExecutedHighGapMs, nominalPeriodMs, nominalOnWindowMs))
+        out.append(
+            indent
+                + String(
+                    format:
+                        "daemon command latency: n=%llu  p50 %.3f ms  p95 %.3f ms  max %.3f ms  mean %.3f ms",
+                    latency.count, latency.p50Ms, latency.p95Ms, latency.maxMs,
+                    latency.meanMs))
         let kinds = commandsByKind.sorted { $0.key < $1.key }
             .map { "\($0.key)=\($0.value)" }.joined(separator: "  ")
         out.append(indent + "commands by kind: " + (kinds.isEmpty ? "(none)" : kinds))
@@ -270,7 +287,9 @@ public final class EngineDiagnostics: @unchecked Sendable {
         counters.high.executed &+= 1
         if let last = lastExecutedHighNanos, now > last {
             let gap = Double(now - last) / 1e6
-            if gap > counters.longestExecutedHighGapMs { counters.longestExecutedHighGapMs = gap }
+            if gap > counters.longestExecutedHighGapMs {
+                counters.longestExecutedHighGapMs = gap
+            }
         }
         lastExecutedHighNanos = now
         skipRun = 0
@@ -279,7 +298,9 @@ public final class EngineDiagnostics: @unchecked Sendable {
     public func noteHighSkipped(latenessMs: Double, thresholdMs: Double) {
         lock.lock(); defer { lock.unlock() }
         counters.high.skipped &+= 1
-        if latenessMs > counters.skipMaxLatenessMs { counters.skipMaxLatenessMs = latenessMs }
+        if latenessMs > counters.skipMaxLatenessMs {
+            counters.skipMaxLatenessMs = latenessMs
+        }
         counters.skipLastThresholdMs = thresholdMs
         skipRun &+= 1
         if skipRun > counters.skipMaxRunLength { counters.skipMaxRunLength = skipRun }
@@ -308,7 +329,9 @@ public final class EngineDiagnostics: @unchecked Sendable {
     /// - Parameter value: the brightness level, for the brightness setters;
     ///   nil for the flag mutators (auto-brightness, idle dimming), which do
     ///   not move the level and must not overwrite the read-back reference.
-    public func noteCommand(kind: String, value: Float? = nil, atNanos: UInt64? = nil, latencyMs: Double) {
+    public func noteCommand(
+        kind: String, value: Float? = nil, atNanos: UInt64? = nil, latencyMs: Double
+    ) {
         lock.lock(); defer { lock.unlock() }
         counters.latency.record(latencyMs)
         counters.commandsByKind[kind, default: 0] &+= 1
@@ -331,8 +354,10 @@ public struct DiagnosticsRecord: Codable, Equatable {
     public var pid: Int32
     public var counters: EngineCounters
 
-    public init(label: String, counters: EngineCounters,
-                recordedAt: Date = Date(), pid: Int32 = getpid()) {
+    public init(
+        label: String, counters: EngineCounters,
+        recordedAt: Date = Date(), pid: Int32 = getpid()
+    ) {
         self.label = label
         self.recordedAt = recordedAt
         self.pid = pid
@@ -353,7 +378,8 @@ public enum DiagnosticsStore {
     }
 
     @discardableResult
-    public static func save(_ record: DiagnosticsRecord, to url: URL = defaultURL) -> Bool {
+    public static func save(_ record: DiagnosticsRecord, to url: URL = defaultURL) -> Bool
+    {
         do {
             try FileManager.default.createDirectory(
                 at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -363,7 +389,9 @@ public enum DiagnosticsStore {
             try encoder.encode(record).write(to: url, options: .atomic)
             return true
         } catch {
-            Log.engine.error("could not write diagnostics: \(String(describing: error), privacy: .public)")
+            Log.engine.error(
+                "could not write diagnostics: \(String(describing: error), privacy: .public)"
+            )
             return false
         }
     }

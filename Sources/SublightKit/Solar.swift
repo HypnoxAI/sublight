@@ -65,9 +65,11 @@ public enum Solar {
     ///   - latitude: degrees north, −90…90.
     ///   - longitude: degrees **east**, −180…180. (Western hemisphere is
     ///     negative — a classic source of off-by-hours bugs.)
-    public static func times(latitude: Double,
-                             longitude: Double,
-                             date: Date = Date()) -> SolarTimes {
+    public static func times(
+        latitude: Double,
+        longitude: Double,
+        date: Date = Date()
+    ) -> SolarTimes {
 
         // Julian day number, then days since the J2000.0 epoch.
         let julianDay = date.timeIntervalSince1970 / 86_400.0 + 2_440_587.5
@@ -88,7 +90,8 @@ public enum Solar {
         let lambda = eclipticLongitude * deg
 
         // Solar transit (local solar noon), as a Julian date.
-        let transit = 2_451_545.0 + meanSolarNoon
+        let transit =
+            2_451_545.0 + meanSolarNoon
             + 0.0053 * sin(Mrad)
             - 0.0069 * sin(2 * lambda)
 
@@ -115,9 +118,10 @@ public enum Solar {
         let setJD = transit + hourAngle / 360.0
         let riseJD = transit - hourAngle / 360.0
 
-        return SolarTimes(sunrise: dateFromJulian(riseJD),
-                          sunset: dateFromJulian(setJD),
-                          condition: .normal)
+        return SolarTimes(
+            sunrise: dateFromJulian(riseJD),
+            sunset: dateFromJulian(setJD),
+            condition: .normal)
     }
 
     /// Named to avoid colliding with the `date` parameter above — a plain
@@ -137,7 +141,8 @@ public enum Solar {
     /// "unset", so it's rejected.
     public static func isValidLocation(latitude: Double, longitude: Double) -> Bool {
         guard latitude >= -90, latitude <= 90,
-              longitude >= -180, longitude <= 180 else { return false }
+            longitude >= -180, longitude <= 180
+        else { return false }
         return !(latitude == 0 && longitude == 0)
     }
 }

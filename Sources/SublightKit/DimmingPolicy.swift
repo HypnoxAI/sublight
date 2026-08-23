@@ -49,12 +49,15 @@ public enum DimmingPolicy {
 
     /// Pure so the "automation must never be the first thing that dims" rule
     /// is a tested fact rather than a comment in a view controller.
-    public static func scheduleTransition(enteringWindow: Bool, consentGranted: Bool) -> ScheduleAction {
+    public static func scheduleTransition(enteringWindow: Bool, consentGranted: Bool)
+        -> ScheduleAction
+    {
         guard enteringWindow else { return .disengage }
         return consentGranted ? .engage : .deferForConsent
     }
 
-    public static func effectiveRunning(userEnabled: Bool, systemSuspended: Bool) -> Bool {
+    public static func effectiveRunning(userEnabled: Bool, systemSuspended: Bool) -> Bool
+    {
         userEnabled && !systemSuspended
     }
 
@@ -63,12 +66,15 @@ public enum DimmingPolicy {
     /// Medium 6 Hz → 0.5, High 8 Hz → 0.8. The boundaries are the preset
     /// MIDPOINTS (4.5 between 3 and 6; 7.0 between 6 and 8), so a custom
     /// frequency lands on whichever preset it is actually closest to.
-    public static func glyphFraction(userEnabled: Bool, systemSuspended: Bool, frequencyHz: Double) -> Double {
-        guard effectiveRunning(userEnabled: userEnabled, systemSuspended: systemSuspended) else { return 0 }
+    public static func glyphFraction(
+        userEnabled: Bool, systemSuspended: Bool, frequencyHz: Double
+    ) -> Double {
+        guard effectiveRunning(userEnabled: userEnabled, systemSuspended: systemSuspended)
+        else { return 0 }
         switch frequencyHz {
         case ..<4.5: return 0.3
         case ..<7.0: return 0.5
-        default:     return 0.8
+        default: return 0.8
         }
     }
 }

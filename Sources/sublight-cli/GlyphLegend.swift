@@ -40,24 +40,28 @@ enum GlyphLegend {
 
     /// The four shipped states. Fractions match DimmingPolicy.glyphFraction.
     static let states: [State] = [
-        State(key: "off",    label: "Off",         fraction: 0.0),
-        State(key: "low",    label: "Low 3 Hz",    fraction: 0.3),
+        State(key: "off", label: "Off", fraction: 0.0),
+        State(key: "low", label: "Low 3 Hz", fraction: 0.3),
         State(key: "medium", label: "Medium 6 Hz", fraction: 0.5),
-        State(key: "high",   label: "High 8 Hz",   fraction: 0.8),
+        State(key: "high", label: "High 8 Hz", fraction: 0.8),
     ]
 
     static let legendFileName = "sublight-menubar-states.png"
 
     // MARK: Deterministic bitmap
 
-    private static func bitmap(width: Int, height: Int, scale: Int,
-                               _ draw: () -> Void) -> NSBitmapImageRep? {
-        guard let rep = NSBitmapImageRep(
-            bitmapDataPlanes: nil,
-            pixelsWide: width * scale, pixelsHigh: height * scale,
-            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
-            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
-        ) else { return nil }
+    private static func bitmap(
+        width: Int, height: Int, scale: Int,
+        _ draw: () -> Void
+    ) -> NSBitmapImageRep? {
+        guard
+            let rep = NSBitmapImageRep(
+                bitmapDataPlanes: nil,
+                pixelsWide: width * scale, pixelsHigh: height * scale,
+                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+            )
+        else { return nil }
         rep.size = NSSize(width: width, height: height)
         guard let ctx = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
         NSGraphicsContext.saveGraphicsState()
@@ -77,21 +81,29 @@ enum GlyphLegend {
     /// directly onto the legend's coloured row would paint the entire cell
     /// instead of just the glyph — which is exactly the solid rectangle the
     /// first version of this produced.
-    private static func tinted(_ fraction: CGFloat, side: CGFloat,
-                               tint: NSColor, scale: Int) -> NSImage? {
-        guard let rep = bitmap(width: Int(side), height: Int(side), scale: scale, {
-            let r = NSRect(x: 0, y: 0, width: side, height: side)
-            StatusGlyph.image(litFraction: fraction).draw(in: r)
-            tint.set()
-            r.fill(using: .sourceAtop)
-        }) else { return nil }
+    private static func tinted(
+        _ fraction: CGFloat, side: CGFloat,
+        tint: NSColor, scale: Int
+    ) -> NSImage? {
+        guard
+            let rep = bitmap(
+                width: Int(side), height: Int(side), scale: scale,
+                {
+                    let r = NSRect(x: 0, y: 0, width: side, height: side)
+                    StatusGlyph.image(litFraction: fraction).draw(in: r)
+                    tint.set()
+                    r.fill(using: .sourceAtop)
+                })
+        else { return nil }
         let image = NSImage(size: NSSize(width: side, height: side))
         image.addRepresentation(rep)
         return image
     }
 
-    private static func draw(_ text: String, centeredIn rect: NSRect, y: CGFloat,
-                             size: CGFloat, weight: NSFont.Weight, color: NSColor) {
+    private static func draw(
+        _ text: String, centeredIn rect: NSRect, y: CGFloat,
+        size: CGFloat, weight: NSFont.Weight, color: NSColor
+    ) {
         let attrs: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: size, weight: weight),
             .foregroundColor: color,
@@ -123,8 +135,12 @@ enum GlyphLegend {
         let height = titleH + rowH * 2 + labelH
 
         // Tint in isolation BEFORE the page context exists — see `tinted`.
-        let onDark = states.map { tinted($0.fraction, side: glyphBox, tint: .white, scale: scale * 2) }
-        let onLight = states.map { tinted($0.fraction, side: glyphBox, tint: .black, scale: scale * 2) }
+        let onDark = states.map {
+            tinted($0.fraction, side: glyphBox, tint: .white, scale: scale * 2)
+        }
+        let onLight = states.map {
+            tinted($0.fraction, side: glyphBox, tint: .black, scale: scale * 2)
+        }
 
         return bitmap(width: Int(width), height: Int(height), scale: scale) {
             let page = NSRect(x: 0, y: 0, width: width, height: height)
@@ -144,24 +160,32 @@ enum GlyphLegend {
             NSRect(x: 0, y: lightY, width: width, height: rowH).fill()
 
             for (i, state) in states.enumerated() {
-                let cell = NSRect(x: CGFloat(i) * cellW, y: 0, width: cellW, height: height)
+                let cell = NSRect(
+                    x: CGFloat(i) * cellW, y: 0, width: cellW, height: height)
                 let gx = cell.midX - glyphBox / 2
-                onDark[i]?.draw(in: NSRect(x: gx, y: darkY + (rowH - glyphBox) / 2,
-                                           width: glyphBox, height: glyphBox))
-                onLight[i]?.draw(in: NSRect(x: gx, y: lightY + (rowH - glyphBox) / 2,
-                                            width: glyphBox, height: glyphBox))
+                onDark[i]?.draw(
+                    in: NSRect(
+                        x: gx, y: darkY + (rowH - glyphBox) / 2,
+                        width: glyphBox, height: glyphBox))
+                onLight[i]?.draw(
+                    in: NSRect(
+                        x: gx, y: lightY + (rowH - glyphBox) / 2,
+                        width: glyphBox, height: glyphBox))
 
                 let lit = StatusGlyph.litKeyCount(litFraction: state.fraction)
-                draw(state.label, centeredIn: cell, y: labelsY + 15, size: 11.5,
-                     weight: .semibold, color: NSColor(white: 0.15, alpha: 1))
-                draw("\(lit) of \(StatusGlyph.keyCount) keys lit",
-                     centeredIn: cell, y: labelsY + 3, size: 9,
-                     weight: .regular, color: NSColor(white: 0.45, alpha: 1))
+                draw(
+                    state.label, centeredIn: cell, y: labelsY + 15, size: 11.5,
+                    weight: .semibold, color: NSColor(white: 0.15, alpha: 1))
+                draw(
+                    "\(lit) of \(StatusGlyph.keyCount) keys lit",
+                    centeredIn: cell, y: labelsY + 3, size: 9,
+                    weight: .regular, color: NSColor(white: 0.45, alpha: 1))
             }
 
-            draw("Sublight menu bar icon — dark and light menu bars",
-                 centeredIn: page, y: titleY + 11, size: 12.5,
-                 weight: .medium, color: NSColor(white: 0.2, alpha: 1))
+            draw(
+                "Sublight menu bar icon — dark and light menu bars",
+                centeredIn: page, y: titleY + 11, size: 12.5,
+                weight: .medium, color: NSColor(white: 0.2, alpha: 1))
         }?.representation(using: .png, properties: [:])
     }
 
@@ -170,14 +194,18 @@ enum GlyphLegend {
     /// Writes every per-state PNG at 1x and 2x plus the composed legend.
     /// Only the legend is committed to the repo (see CONTRIBUTING).
     static func render(to dir: URL) throws -> [String] {
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: dir, withIntermediateDirectories: true)
         var written: [String] = []
         for state in states {
             for scale in [1, 2] {
                 guard let data = stateData(fraction: state.fraction, scale: scale) else {
-                    throw NSError(domain: "GlyphLegend", code: 1, userInfo: [
-                        NSLocalizedDescriptionKey: "could not render state \(state.key)@\(scale)x",
-                    ])
+                    throw NSError(
+                        domain: "GlyphLegend", code: 1,
+                        userInfo: [
+                            NSLocalizedDescriptionKey:
+                                "could not render state \(state.key)@\(scale)x"
+                        ])
                 }
                 let name = "glyph-\(state.key)@\(scale)x.png"
                 try data.write(to: dir.appendingPathComponent(name), options: .atomic)
@@ -185,9 +213,11 @@ enum GlyphLegend {
             }
         }
         guard let legend = legendData() else {
-            throw NSError(domain: "GlyphLegend", code: 2, userInfo: [
-                NSLocalizedDescriptionKey: "could not render the legend",
-            ])
+            throw NSError(
+                domain: "GlyphLegend", code: 2,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "could not render the legend"
+                ])
         }
         try legend.write(to: dir.appendingPathComponent(legendFileName), options: .atomic)
         written.append(legendFileName)

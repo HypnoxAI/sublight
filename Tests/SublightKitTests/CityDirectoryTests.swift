@@ -12,6 +12,7 @@
 //
 
 import XCTest
+
 @testable import SublightKit
 
 final class CityDirectoryTests: XCTestCase {
@@ -21,7 +22,7 @@ final class CityDirectoryTests: XCTestCase {
             XCTAssertTrue(
                 Solar.isValidLocation(latitude: city.latitude, longitude: city.longitude),
                 "\(city.displayName) has implausible coordinates "
-                + "(\(city.latitude), \(city.longitude))")
+                    + "(\(city.latitude), \(city.longitude))")
         }
     }
 
@@ -29,8 +30,9 @@ final class CityDirectoryTests: XCTestCase {
     /// time-zone auto-detection for that city.
     func testAllTimeZoneIdentifiersResolve() {
         for city in CityDirectory.all {
-            XCTAssertNotNil(TimeZone(identifier: city.timeZoneID),
-                            "\(city.displayName): unknown time zone '\(city.timeZoneID)'")
+            XCTAssertNotNil(
+                TimeZone(identifier: city.timeZoneID),
+                "\(city.displayName): unknown time zone '\(city.timeZoneID)'")
         }
     }
 
@@ -50,25 +52,31 @@ final class CityDirectoryTests: XCTestCase {
     /// should get a sensible pre-filled location.
     func testTimeZoneMatching() {
         XCTAssertEqual(CityDirectory.match(timeZoneID: "Europe/London")?.city, "London")
-        XCTAssertEqual(CityDirectory.match(timeZoneID: "Australia/Sydney")?.city, "Sydney")
+        XCTAssertEqual(
+            CityDirectory.match(timeZoneID: "Australia/Sydney")?.city, "Sydney")
 
         // Zones containing several listed cities must resolve to the city the
         // zone is named after, not merely the first one in the table.
         XCTAssertEqual(CityDirectory.match(timeZoneID: "Asia/Tokyo")?.city, "Tokyo")
-        XCTAssertEqual(CityDirectory.match(timeZoneID: "America/New_York")?.city, "New York")
+        XCTAssertEqual(
+            CityDirectory.match(timeZoneID: "America/New_York")?.city, "New York")
         XCTAssertEqual(CityDirectory.match(timeZoneID: "Asia/Kolkata")?.city, "Kolkata")
-        XCTAssertEqual(CityDirectory.match(timeZoneID: "Africa/Johannesburg")?.city, "Johannesburg")
+        XCTAssertEqual(
+            CityDirectory.match(timeZoneID: "Africa/Johannesburg")?.city, "Johannesburg")
 
         // Accent-insensitive.
-        XCTAssertEqual(CityDirectory.match(timeZoneID: "America/Sao_Paulo")?.city, "São Paulo")
+        XCTAssertEqual(
+            CityDirectory.match(timeZoneID: "America/Sao_Paulo")?.city, "São Paulo")
         XCTAssertEqual(CityDirectory.match(timeZoneID: "Europe/Zurich")?.city, "Zürich")
 
         // Prefix match, for zones whose name is shorter than the city's.
-        XCTAssertEqual(CityDirectory.match(timeZoneID: "Asia/Ho_Chi_Minh")?.city, "Ho Chi Minh City")
+        XCTAssertEqual(
+            CityDirectory.match(timeZoneID: "Asia/Ho_Chi_Minh")?.city, "Ho Chi Minh City")
 
         // Multi-segment identifier.
-        XCTAssertEqual(CityDirectory.match(timeZoneID: "America/Argentina/Buenos_Aires")?.city,
-                       "Buenos Aires")
+        XCTAssertEqual(
+            CityDirectory.match(timeZoneID: "America/Argentina/Buenos_Aires")?.city,
+            "Buenos Aires")
 
         // An unlisted zone should still fall back within the right region
         // rather than giving up entirely.
@@ -98,14 +106,17 @@ final class CityDirectoryTests: XCTestCase {
         let equinox = cal.date(from: c)!
 
         for city in CityDirectory.all {
-            let t = Solar.times(latitude: city.latitude, longitude: city.longitude, date: equinox)
-            XCTAssertEqual(t.condition, .normal, "\(city.displayName) has no equinox sunrise/sunset")
+            let t = Solar.times(
+                latitude: city.latitude, longitude: city.longitude, date: equinox)
+            XCTAssertEqual(
+                t.condition, .normal, "\(city.displayName) has no equinox sunrise/sunset")
 
             guard let rise = t.sunrise, let set = t.sunset else { continue }
             // At an equinox day length is close to 12 hours everywhere.
             let hours = set.timeIntervalSince(rise) / 3600
-            XCTAssertEqual(hours, 12, accuracy: 1.0,
-                           "\(city.displayName): equinox day length \(hours)h")
+            XCTAssertEqual(
+                hours, 12, accuracy: 1.0,
+                "\(city.displayName): equinox day length \(hours)h")
         }
     }
 }

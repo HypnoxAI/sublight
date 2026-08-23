@@ -71,24 +71,27 @@ public final class SleepWakeObserver: @unchecked Sendable {
             (NSWorkspace.sessionDidBecomeActiveNotification, .sessionDidBecomeActive),
         ]
         for (name, transition) in pairs {
-            tokens.append(center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
-                guard let self else { return }
-                if transition.isSuspend {
-                    // Cancel any resume still waiting out its settle delay: the
-                    // machine is suspending again, so that resume is stale.
-                    self.pendingResume?.cancel()
-                    self.pendingResume = nil
-                    onSuspend(transition)
-                } else {
-                    self.pendingResume?.cancel()
-                    let work = DispatchWorkItem { [weak self] in
-                        self?.pendingResume = nil
-                        onResume(transition)
+            tokens.append(
+                center.addObserver(forName: name, object: nil, queue: .main) {
+                    [weak self] _ in
+                    guard let self else { return }
+                    if transition.isSuspend {
+                        // Cancel any resume still waiting out its settle delay: the
+                        // machine is suspending again, so that resume is stale.
+                        self.pendingResume?.cancel()
+                        self.pendingResume = nil
+                        onSuspend(transition)
+                    } else {
+                        self.pendingResume?.cancel()
+                        let work = DispatchWorkItem { [weak self] in
+                            self?.pendingResume = nil
+                            onResume(transition)
+                        }
+                        self.pendingResume = work
+                        DispatchQueue.main.asyncAfter(
+                            deadline: .now() + delay, execute: work)
                     }
-                    self.pendingResume = work
-                    DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
-                }
-            })
+                })
         }
     }
 

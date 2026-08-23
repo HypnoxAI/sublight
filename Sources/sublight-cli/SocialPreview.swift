@@ -28,13 +28,17 @@ enum SocialPreview {
     static let size = NSSize(width: 1280, height: 640)
     static let tagline = "Dim your keyboard below the macOS minimum."
 
-    private static func bitmap(_ size: NSSize, scale: Int, _ draw: () -> Void) -> NSBitmapImageRep? {
-        guard let rep = NSBitmapImageRep(
-            bitmapDataPlanes: nil,
-            pixelsWide: Int(size.width) * scale, pixelsHigh: Int(size.height) * scale,
-            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
-            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
-        ) else { return nil }
+    private static func bitmap(_ size: NSSize, scale: Int, _ draw: () -> Void)
+        -> NSBitmapImageRep?
+    {
+        guard
+            let rep = NSBitmapImageRep(
+                bitmapDataPlanes: nil,
+                pixelsWide: Int(size.width) * scale, pixelsHigh: Int(size.height) * scale,
+                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+            )
+        else { return nil }
         rep.size = size
         guard let ctx = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
         NSGraphicsContext.saveGraphicsState()
@@ -57,18 +61,24 @@ enum SocialPreview {
 
             let markSide: CGFloat = 300
             let markX: CGFloat = 96
-            icon.draw(in: NSRect(x: markX, y: (size.height - markSide) / 2,
-                                 width: markSide, height: markSide))
+            icon.draw(
+                in: NSRect(
+                    x: markX, y: (size.height - markSide) / 2,
+                    width: markSide, height: markSide))
 
             let textX = markX + markSide + 72
-            let word = NSAttributedString(string: "Sublight", attributes: [
-                .font: NSFont.systemFont(ofSize: 104, weight: .semibold),
-                .foregroundColor: NSColor.white,
-            ])
-            let line = NSAttributedString(string: tagline, attributes: [
-                .font: NSFont.systemFont(ofSize: 34, weight: .regular),
-                .foregroundColor: NSColor(white: 0.68, alpha: 1),
-            ])
+            let word = NSAttributedString(
+                string: "Sublight",
+                attributes: [
+                    .font: NSFont.systemFont(ofSize: 104, weight: .semibold),
+                    .foregroundColor: NSColor.white,
+                ])
+            let line = NSAttributedString(
+                string: tagline,
+                attributes: [
+                    .font: NSFont.systemFont(ofSize: 34, weight: .regular),
+                    .foregroundColor: NSColor(white: 0.68, alpha: 1),
+                ])
 
             // Optically centre the pair as a block rather than centring each
             // line independently.

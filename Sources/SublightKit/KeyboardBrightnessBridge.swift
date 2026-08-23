@@ -35,9 +35,9 @@
 //  Licensed under the Apache License 2.0 — see LICENSE.
 //
 
+import Darwin
 import Foundation
 import ObjectiveC
-import Darwin
 import os
 
 /// Selectors we expect `KeyboardBrightnessClient` to implement.
@@ -78,7 +78,10 @@ import os
     //     floats travel in v-registers and ints in x-registers, so declaring
     //     fadeSpeed as Double/Float would misalign every argument after it. If a
     //     future macOS changes these types, `sig` will show it — re-check there.
-    func setBrightness(_ brightness: Float, fadeSpeed: Int32, commit: Bool, forKeyboard keyboardID: UInt64) -> Bool
+    func setBrightness(
+        _ brightness: Float, fadeSpeed: Int32, commit: Bool,
+        forKeyboard keyboardID: UInt64
+    ) -> Bool
     func backlightLevel(forKeyboard keyboardID: UInt64) -> Float
     func suspendIdleDimming(_ suspend: Bool, forKeyboard keyboardID: UInt64) -> Bool
     func isIdleDimmingSuspended(onKeyboard keyboardID: UInt64) -> Bool
@@ -88,7 +91,8 @@ import os
     // Change-notification API (yield-to-manual spike). The block's true argument
     // signature is unknown, so we register a ZERO-ARG block: safe because any
     // extra args the system passes sit in registers the block never reads.
-    func registerNotificationForKeys(_ keys: Any?, keyboardID: UInt64, block: @escaping @Sendable () -> Void)
+    func registerNotificationForKeys(
+        _ keys: Any?, keyboardID: UInt64, block: @escaping @Sendable () -> Void)
     func unregisterKeyboardNotificationBlock()
 }
 
@@ -106,13 +110,17 @@ public final class KeyboardBrightnessBridge: @unchecked Sendable {
         public var description: String {
             switch self {
             case .frameworkNotLoadable:
-                return "Could not dlopen CoreBrightness.framework. Are you on macOS? (This tool is macOS/Apple Silicon only.)"
+                return
+                    "Could not dlopen CoreBrightness.framework. Are you on macOS? (This tool is macOS/Apple Silicon only.)"
             case .classNotFound:
-                return "CoreBrightness loaded, but KeyboardBrightnessClient was not found. Apple may have renamed it — run `sublight-cli dump` on a working build, or check recent class dumps."
+                return
+                    "CoreBrightness loaded, but KeyboardBrightnessClient was not found. Apple may have renamed it — run `sublight-cli dump` on a working build, or check recent class dumps."
             case .coreSelectorsMissing(let missing):
-                return "KeyboardBrightnessClient exists but is missing core selectors: \(missing.joined(separator: ", ")). The selector table has drifted — run `sublight-cli dump` and update the bridge."
+                return
+                    "KeyboardBrightnessClient exists but is missing core selectors: \(missing.joined(separator: ", ")). The selector table has drifted — run `sublight-cli dump` and update the bridge."
             case .noBacklitKeyboard:
-                return "No backlit keyboard was found. External keyboards without backlight are not supported."
+                return
+                    "No backlit keyboard was found. External keyboards without backlight are not supported."
             }
         }
     }
@@ -166,7 +174,9 @@ public final class KeyboardBrightnessBridge: @unchecked Sendable {
             guard dlopen(Self.frameworkPath, RTLD_LAZY) != nil else {
                 throw BridgeError.frameworkNotLoadable
             }
-            guard let cls = NSClassFromString("KeyboardBrightnessClient") as? NSObject.Type else {
+            guard
+                let cls = NSClassFromString("KeyboardBrightnessClient") as? NSObject.Type
+            else {
                 throw BridgeError.classNotFound
             }
             return cls.init()
@@ -207,7 +217,8 @@ public final class KeyboardBrightnessBridge: @unchecked Sendable {
 
     // MARK: - Command truth
 
-    private static let signposter = OSSignposter(subsystem: Log.subsystem, category: "engine")
+    private static let signposter = OSSignposter(
+        subsystem: Log.subsystem, category: "engine")
 
     /// Time, signpost, log and count ONE backlight-mutating daemon call.
     ///
@@ -220,23 +231,28 @@ public final class KeyboardBrightnessBridge: @unchecked Sendable {
     /// The formatting all happens inside os.Logger autoclosures, so when debug
     /// logging is off the cost is a lock, a subtraction and two counters.
     @discardableResult
-    private func timedMutation(_ kind: String,
-                               value: Float? = nil,
-                               fadeSpeed: Int32? = nil,
-                               commit: Bool? = nil,
-                               flag: Bool? = nil,
-                               seconds: Double? = nil,
-                               _ keyboardID: UInt64,
-                               _ body: () -> Bool) -> Bool {
-        let state = Self.signposter.beginInterval("XPC", id: Self.signposter.makeSignpostID())
+    private func timedMutation(
+        _ kind: String,
+        value: Float? = nil,
+        fadeSpeed: Int32? = nil,
+        commit: Bool? = nil,
+        flag: Bool? = nil,
+        seconds: Double? = nil,
+        _ keyboardID: UInt64,
+        _ body: () -> Bool
+    ) -> Bool {
+        let state = Self.signposter.beginInterval(
+            "XPC", id: Self.signposter.makeSignpostID())
         let t0 = DispatchTime.now().uptimeNanoseconds
         let ok = body()
         let t1 = DispatchTime.now().uptimeNanoseconds
         Self.signposter.endInterval("XPC", state)
 
         let ms = Double(t1 &- t0) / 1e6
-        EngineDiagnostics.shared.noteCommand(kind: kind, value: value, atNanos: t0, latencyMs: ms)
-        Log.engine.debug("""
+        EngineDiagnostics.shared.noteCommand(
+            kind: kind, value: value, atNanos: t0, latencyMs: ms)
+        Log.engine.debug(
+            """
             cmd \(kind, privacy: .public) \
             t=\(Double(t0) / 1e6, format: .fixed(precision: 3), privacy: .public)ms \
             value=\(value.map { String(format: "%.4f", $0) } ?? "-", privacy: .public) \
@@ -257,7 +273,7 @@ public final class KeyboardBrightnessBridge: @unchecked Sendable {
     public func keyboardIDs() -> [UInt64] {
         EngineQueue.run {
             guard responds("copyKeyboardBacklightIDs"),
-                  let arr = dyn.copyKeyboardBacklightIDs?() as? [NSNumber]
+                let arr = dyn.copyKeyboardBacklightIDs?() as? [NSNumber]
             else { return [] }
             return arr.map { $0.uint64Value }
         }
@@ -344,12 +360,20 @@ public final class KeyboardBrightnessBridge: @unchecked Sendable {
     /// engine becomes unnecessary. `fadeSpeed` is a 32-bit int enum (verified
     /// via `sig`); pass small integers (0, 1, 2, …).
     @discardableResult
-    public func setBrightness(_ value: Float, fadeSpeed: Int32, commit: Bool, _ keyboardID: UInt64) -> Bool {
+    public func setBrightness(
+        _ value: Float, fadeSpeed: Int32, commit: Bool, _ keyboardID: UInt64
+    ) -> Bool {
         EngineQueue.run {
-            guard responds("setBrightness:fadeSpeed:commit:forKeyboard:") else { return false }
-            return timedMutation("brightness-fade", value: value, fadeSpeed: fadeSpeed,
-                                 commit: commit, keyboardID) {
-                dyn.setBrightness?(value, fadeSpeed: fadeSpeed, commit: commit, forKeyboard: keyboardID) ?? false
+            guard responds("setBrightness:fadeSpeed:commit:forKeyboard:") else {
+                return false
+            }
+            return timedMutation(
+                "brightness-fade", value: value, fadeSpeed: fadeSpeed,
+                commit: commit, keyboardID
+            ) {
+                dyn.setBrightness?(
+                    value, fadeSpeed: fadeSpeed, commit: commit, forKeyboard: keyboardID)
+                    ?? false
             }
         }
     }
@@ -390,7 +414,8 @@ public final class KeyboardBrightnessBridge: @unchecked Sendable {
 
     public var supportsAutoBrightnessControl: Bool {
         EngineQueue.run {
-            responds("enableAutoBrightness:forKeyboard:") && responds("isAutoBrightnessEnabledForKeyboard:")
+            responds("enableAutoBrightness:forKeyboard:")
+                && responds("isAutoBrightnessEnabledForKeyboard:")
         }
     }
 
@@ -494,10 +519,14 @@ public final class KeyboardBrightnessBridge: @unchecked Sendable {
     /// despite the unknown real block signature: a () -> Void block ignores any
     /// args the system passes (they occupy registers the block never reads).
     @discardableResult
-    public func registerChangeNotification(keys: Any?, _ keyboardID: UInt64,
-                                           _ block: @escaping @Sendable () -> Void) -> Bool {
+    public func registerChangeNotification(
+        keys: Any?, _ keyboardID: UInt64,
+        _ block: @escaping @Sendable () -> Void
+    ) -> Bool {
         EngineQueue.run {
-            guard responds("registerNotificationForKeys:keyboardID:block:") else { return false }
+            guard responds("registerNotificationForKeys:keyboardID:block:") else {
+                return false
+            }
             dyn.registerNotificationForKeys?(keys, keyboardID: keyboardID, block: block)
             return true
         }
@@ -522,7 +551,8 @@ public final class KeyboardBrightnessBridge: @unchecked Sendable {
             var count: UInt32 = 0
             if let methods = class_copyMethodList(type(of: client), &count) {
                 for i in 0..<Int(count) {
-                    result.append(String(cString: sel_getName(method_getName(methods[i]))))
+                    result.append(
+                        String(cString: sel_getName(method_getName(methods[i]))))
                 }
                 free(methods)
             }
@@ -538,7 +568,9 @@ public final class KeyboardBrightnessBridge: @unchecked Sendable {
     public func methodSignature(_ selectorName: String) -> String? {
         EngineQueue.run {
             let sel = NSSelectorFromString(selectorName)
-            guard let m = class_getInstanceMethod(type(of: client), sel) else { return nil }
+            guard let m = class_getInstanceMethod(type(of: client), sel) else {
+                return nil
+            }
             return method_getTypeEncoding(m).map { String(cString: $0) }
         }
     }
@@ -555,7 +587,7 @@ public final class KeyboardBrightnessBridge: @unchecked Sendable {
             "C": "unsigned char", "I": "unsigned int", "S": "unsigned short",
             "L": "unsigned long", "Q": "unsigned long long", "f": "float",
             "d": "double", "B": "bool", "v": "void", "*": "char*", "@": "id",
-            "#": "Class", ":": "SEL", "?": "block/unknown"
+            "#": "Class", ":": "SEL", "?": "block/unknown",
         ]
         let qualifiers: Set<Character> = ["r", "n", "N", "o", "O", "R", "V"]
         var tokens: [String] = []
@@ -565,7 +597,8 @@ public final class KeyboardBrightnessBridge: @unchecked Sendable {
         }
         guard tokens.count >= 3 else { return encoding }
         let ret = tokens[0]
-        let args = Array(tokens.dropFirst(3)) // drop return, self(@), _cmd(:)
-        return "returns \(ret); args: " + (args.isEmpty ? "(none)" : args.joined(separator: ", "))
+        let args = Array(tokens.dropFirst(3))  // drop return, self(@), _cmd(:)
+        return "returns \(ret); args: "
+            + (args.isEmpty ? "(none)" : args.joined(separator: ", "))
     }
 }

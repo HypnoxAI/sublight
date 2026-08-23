@@ -9,8 +9,9 @@
 //  Licensed under the Apache License 2.0 — see LICENSE.
 //
 
-import XCTest
 import AppKit
+import XCTest
+
 @testable import SublightKit
 
 /// `@MainActor` because StatusGlyph is — it vends NSImages for a status item.
@@ -33,16 +34,21 @@ final class StatusGlyphTests: XCTestCase {
     /// than re-stating the fractions — if a bucket moves, this fails.
     func testTheGlyphAgreesWithTheDimmingPolicyBuckets() {
         func lit(_ hz: Double) -> Int {
-            StatusGlyph.litKeyCount(litFraction: CGFloat(
-                DimmingPolicy.glyphFraction(userEnabled: true, systemSuspended: false, frequencyHz: hz)))
+            StatusGlyph.litKeyCount(
+                litFraction: CGFloat(
+                    DimmingPolicy.glyphFraction(
+                        userEnabled: true, systemSuspended: false, frequencyHz: hz)))
         }
         XCTAssertEqual(lit(FrequencyPreset.low), 3)
         XCTAssertEqual(lit(FrequencyPreset.medium), 5)
         XCTAssertEqual(lit(FrequencyPreset.high), 8)
-        XCTAssertEqual(StatusGlyph.litKeyCount(litFraction: CGFloat(
-            DimmingPolicy.glyphFraction(userEnabled: false, systemSuspended: false,
-                                        frequencyHz: FrequencyPreset.high))), 0,
-                       "not dimming reads hollow")
+        XCTAssertEqual(
+            StatusGlyph.litKeyCount(
+                litFraction: CGFloat(
+                    DimmingPolicy.glyphFraction(
+                        userEnabled: false, systemSuspended: false,
+                        frequencyHz: FrequencyPreset.high))), 0,
+            "not dimming reads hollow")
     }
 
     func testFractionIsClampedRatherThanTrapping() {
@@ -52,8 +58,11 @@ final class StatusGlyphTests: XCTestCase {
 
     func testTheImageIsATemplateSoMacOSCanTintIt() {
         let image = StatusGlyph.image(litFraction: 0.5)
-        XCTAssertTrue(image.isTemplate, "a non-template menu bar icon breaks in dark and high-contrast modes")
-        XCTAssertEqual(image.size, NSSize(width: 18, height: 18), "the standard status item canvas")
+        XCTAssertTrue(
+            image.isTemplate,
+            "a non-template menu bar icon breaks in dark and high-contrast modes")
+        XCTAssertEqual(
+            image.size, NSSize(width: 18, height: 18), "the standard status item canvas")
         XCTAssertEqual(image.accessibilityDescription, "Sublight")
     }
 
@@ -61,9 +70,12 @@ final class StatusGlyphTests: XCTestCase {
     /// drags included, so equal states must hand back the SAME instance rather
     /// than a freshly built one.
     func testImagesAreMemoizedPerState() {
-        XCTAssertTrue(StatusGlyph.image(litFraction: 0.8) === StatusGlyph.image(litFraction: 0.8))
-        XCTAssertFalse(StatusGlyph.image(litFraction: 0.8) === StatusGlyph.image(litFraction: 0.3))
+        XCTAssertTrue(
+            StatusGlyph.image(litFraction: 0.8) === StatusGlyph.image(litFraction: 0.8))
+        XCTAssertFalse(
+            StatusGlyph.image(litFraction: 0.8) === StatusGlyph.image(litFraction: 0.3))
         // Clamping means out-of-range requests share the clamped instance.
-        XCTAssertTrue(StatusGlyph.image(litFraction: 2.0) === StatusGlyph.image(litFraction: 1.0))
+        XCTAssertTrue(
+            StatusGlyph.image(litFraction: 2.0) === StatusGlyph.image(litFraction: 1.0))
     }
 }

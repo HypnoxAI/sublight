@@ -6,8 +6,9 @@
 //  Licensed under the Apache License 2.0 — see LICENSE.
 //
 
-import XCTest
 import Darwin
+import XCTest
+
 @testable import SublightKit
 
 private func currentBootSeconds() -> Int64 {
@@ -25,7 +26,8 @@ final class DirtyFlagTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        dir = FileManager.default.temporaryDirectory.appendingPathComponent("sublight-flag-\(UUID().uuidString)")
+        dir = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "sublight-flag-\(UUID().uuidString)")
         suiteName = "sublight.tests.\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: suiteName)
         flag = DirtyFlag(directory: dir, defaults: defaults)
@@ -49,7 +51,10 @@ final class DirtyFlagTests: XCTestCase {
         // process here, which is the same-process launch case → recover).
         flag.set()
         var restored = 0
-        XCTAssertEqual(flag.recoverIfNeeded { restored += 1; return true }, .recoveredFromFile)
+        XCTAssertEqual(
+            flag.recoverIfNeeded {
+                restored += 1; return true
+            }, .recoveredFromFile)
         XCTAssertEqual(restored, 1)
         XCTAssertFalse(flag.isSet)
     }
@@ -59,7 +64,8 @@ final class DirtyFlagTests: XCTestCase {
     /// The caller must terminate it.
     private func spawnHelper(named name: String) -> Process {
         let exe = dir.appendingPathComponent(name)
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(
+            at: dir, withIntermediateDirectories: true)
         try? FileManager.default.copyItem(at: URL(fileURLWithPath: "/bin/sleep"), to: exe)
         // A copied system binary has an invalid signature on arm64 and would be
         // killed on exec; ad-hoc re-sign so the helper actually runs.
@@ -75,8 +81,10 @@ final class DirtyFlagTests: XCTestCase {
     }
 
     private func writeStamp(pid: pid_t, boot: Int64) {
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        try? Data("\(boot):\(pid)\n".utf8).write(to: dir.appendingPathComponent("engine.dirty"))
+        try? FileManager.default.createDirectory(
+            at: dir, withIntermediateDirectories: true)
+        try? Data("\(boot):\(pid)\n".utf8).write(
+            to: dir.appendingPathComponent("engine.dirty"))
     }
 
     func testFlagHeldByALiveSublightProcessIsNotTreatedAsDirty() throws {
@@ -92,8 +100,11 @@ final class DirtyFlagTests: XCTestCase {
         try XCTSkipUnless(pid > 0 && kill(pid, 0) == 0, "helper process did not start")
         writeStamp(pid: pid, boot: currentBootSeconds())
         var restored = 0
-        XCTAssertEqual(flag.recoverIfNeeded { restored += 1; return true }, .clean,
-                       "a flag a live Sublight process owns must not be treated as a crash")
+        XCTAssertEqual(
+            flag.recoverIfNeeded {
+                restored += 1; return true
+            }, .clean,
+            "a flag a live Sublight process owns must not be treated as a crash")
         XCTAssertEqual(restored, 0)
         XCTAssertTrue(flag.isSet, "the live owner's flag is left in place")
     }
@@ -109,8 +120,11 @@ final class DirtyFlagTests: XCTestCase {
         usleep(150_000)
         writeStamp(pid: p.processIdentifier, boot: currentBootSeconds())
         var restored = 0
-        XCTAssertEqual(flag.recoverIfNeeded { restored += 1; return true }, .recoveredFromFile,
-                       "a reused PID owned by an unrelated process is not a live owner")
+        XCTAssertEqual(
+            flag.recoverIfNeeded {
+                restored += 1; return true
+            }, .recoveredFromFile,
+            "a reused PID owned by an unrelated process is not a live owner")
         XCTAssertEqual(restored, 1)
         XCTAssertFalse(flag.isSet)
     }
@@ -118,11 +132,16 @@ final class DirtyFlagTests: XCTestCase {
     func testFlagFromAPriorBootIsAlwaysRecovered() {
         // Same PID as a live process (1), but stamped with an OLD boot time:
         // a reboot means it is unquestionably a crash remnant.
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        try? Data("\(currentBootSeconds() - 100_000):1\n".utf8).write(to: dir.appendingPathComponent("engine.dirty"))
+        try? FileManager.default.createDirectory(
+            at: dir, withIntermediateDirectories: true)
+        try? Data("\(currentBootSeconds() - 100_000):1\n".utf8).write(
+            to: dir.appendingPathComponent("engine.dirty"))
         var restored = 0
-        XCTAssertEqual(flag.recoverIfNeeded { restored += 1; return true }, .recoveredFromFile,
-                       "a prior-boot flag heals regardless of what its PID means now")
+        XCTAssertEqual(
+            flag.recoverIfNeeded {
+                restored += 1; return true
+            }, .recoveredFromFile,
+            "a prior-boot flag heals regardless of what its PID means now")
         XCTAssertEqual(restored, 1)
         XCTAssertFalse(flag.isSet)
     }
@@ -132,20 +151,29 @@ final class DirtyFlagTests: XCTestCase {
         // live *Sublight* process as an owner. PID 1's path is unreadable so it
         // is treated conservatively as an owner (covered above); to exercise the
         // reused-PID recovery deterministically we use a definitely-dead PID.
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        try? Data("\(currentBootSeconds()):999999\n".utf8).write(to: dir.appendingPathComponent("engine.dirty"))
+        try? FileManager.default.createDirectory(
+            at: dir, withIntermediateDirectories: true)
+        try? Data("\(currentBootSeconds()):999999\n".utf8).write(
+            to: dir.appendingPathComponent("engine.dirty"))
         var restored = 0
-        XCTAssertEqual(flag.recoverIfNeeded { restored += 1; return true }, .recoveredFromFile)
+        XCTAssertEqual(
+            flag.recoverIfNeeded {
+                restored += 1; return true
+            }, .recoveredFromFile)
         XCTAssertEqual(restored, 1)
         XCTAssertFalse(flag.isSet)
     }
 
     func testLegacyPidOnlyFlagIsRecovered() {
         // Old pid-only format (no boot stamp) is treated as a crash remnant.
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(
+            at: dir, withIntermediateDirectories: true)
         try? Data("999999\n".utf8).write(to: dir.appendingPathComponent("engine.dirty"))
         var restored = 0
-        XCTAssertEqual(flag.recoverIfNeeded { restored += 1; return true }, .recoveredFromFile)
+        XCTAssertEqual(
+            flag.recoverIfNeeded {
+                restored += 1; return true
+            }, .recoveredFromFile)
         XCTAssertEqual(restored, 1)
         XCTAssertFalse(flag.isSet)
     }
@@ -153,7 +181,9 @@ final class DirtyFlagTests: XCTestCase {
     func testLegacyKeyRestoreFailureConvertsToFileFlagForRetry() {
         defaults.set(true, forKey: DirtyFlag.legacyDefaultsKey)
         XCTAssertEqual(flag.recoverIfNeeded { false }, .restoreFailed)
-        XCTAssertNil(defaults.object(forKey: DirtyFlag.legacyDefaultsKey), "legacy key migrated away")
+        XCTAssertNil(
+            defaults.object(forKey: DirtyFlag.legacyDefaultsKey),
+            "legacy key migrated away")
         XCTAssertTrue(flag.isSet, "converted to a file flag so the next launch retries")
     }
 
@@ -161,22 +191,30 @@ final class DirtyFlagTests: XCTestCase {
         XCTAssertFalse(flag.isSet)
         flag.set()
         XCTAssertTrue(flag.isSet)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: dir.appendingPathComponent("engine.dirty").path))
+        XCTAssertTrue(
+            FileManager.default.fileExists(
+                atPath: dir.appendingPathComponent("engine.dirty").path))
         flag.clear()
         XCTAssertFalse(flag.isSet)
-        flag.clear()   // idempotent
+        flag.clear()  // idempotent
     }
 
     func testCleanLaunchDoesNotRestore() {
         var restored = 0
-        XCTAssertEqual(flag.recoverIfNeeded { restored += 1; return true }, .clean)
+        XCTAssertEqual(
+            flag.recoverIfNeeded {
+                restored += 1; return true
+            }, .clean)
         XCTAssertEqual(restored, 0)
     }
 
     func testFileFlagTriggersRestoreAndIsRemoved() {
         flag.set()
         var restored = 0
-        XCTAssertEqual(flag.recoverIfNeeded { restored += 1; return true }, .recoveredFromFile)
+        XCTAssertEqual(
+            flag.recoverIfNeeded {
+                restored += 1; return true
+            }, .recoveredFromFile)
         XCTAssertEqual(restored, 1)
         XCTAssertFalse(flag.isSet)
     }
@@ -190,16 +228,25 @@ final class DirtyFlagTests: XCTestCase {
     func testLegacyKeyIsTreatedAsDirtyOnceThenDeleted() {
         defaults.set(true, forKey: DirtyFlag.legacyDefaultsKey)
         var restored = 0
-        XCTAssertEqual(flag.recoverIfNeeded { restored += 1; return true }, .recoveredFromLegacyKey)
+        XCTAssertEqual(
+            flag.recoverIfNeeded {
+                restored += 1; return true
+            }, .recoveredFromLegacyKey)
         XCTAssertEqual(restored, 1)
         XCTAssertNil(defaults.object(forKey: DirtyFlag.legacyDefaultsKey))
-        XCTAssertEqual(flag.recoverIfNeeded { restored += 1; return true }, .clean)
+        XCTAssertEqual(
+            flag.recoverIfNeeded {
+                restored += 1; return true
+            }, .clean)
         XCTAssertEqual(restored, 1)
     }
 
     func testLegacyKeyFalseIsCleanAndDeleted() {
         defaults.set(false, forKey: DirtyFlag.legacyDefaultsKey)
-        XCTAssertEqual(flag.recoverIfNeeded { XCTFail("no restore"); return true }, .clean)
+        XCTAssertEqual(
+            flag.recoverIfNeeded {
+                XCTFail("no restore"); return true
+            }, .clean)
         XCTAssertNil(defaults.object(forKey: DirtyFlag.legacyDefaultsKey))
     }
 

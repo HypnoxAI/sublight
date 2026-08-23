@@ -11,9 +11,9 @@
 //  Licensed under the Apache License 2.0 — see LICENSE.
 //
 
-import SwiftUI
 import AppKit
 import SublightKit
+import SwiftUI
 
 struct SettingsView: View {
     var body: some View {
@@ -49,9 +49,11 @@ private struct GeneralTab: View {
             Section {
                 Toggle(isOn: $state.launchAtLogin) {
                     Text("Launch at login")
-                    Text("Starts Sublight automatically. The app must live in /Applications for this to persist across restarts.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Text(
+                        "Starts Sublight automatically. The app must live in /Applications for this to persist across restarts."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
             }
 
@@ -75,7 +77,8 @@ private struct GeneralTab: View {
                     Text("Location")
                     Text(locationSubtitle)
                         .font(.caption)
-                        .foregroundStyle(state.hasLocation ? Color.secondary : Color.orange)
+                        .foregroundStyle(
+                            state.hasLocation ? Color.secondary : Color.orange)
                 }
 
                 // Coordinates stay visible either way: editable when custom,
@@ -83,26 +86,32 @@ private struct GeneralTab: View {
                 // checked rather than taken on trust.
                 LabeledContent {
                     HStack(spacing: 6) {
-                        TextField("Lat", value: $state.latitude,
-                                  format: .number.precision(.fractionLength(0...4)))
-                            .frame(width: 78)
-                            .multilineTextAlignment(.trailing)
-                            .disabled(state.selectedCity != nil)
-                            .accessibilityLabel("Latitude")
-                        TextField("Lon", value: $state.longitude,
-                                  format: .number.precision(.fractionLength(0...4)))
-                            .frame(width: 78)
-                            .multilineTextAlignment(.trailing)
-                            .disabled(state.selectedCity != nil)
-                            .accessibilityLabel("Longitude")
+                        TextField(
+                            "Lat", value: $state.latitude,
+                            format: .number.precision(.fractionLength(0...4))
+                        )
+                        .frame(width: 78)
+                        .multilineTextAlignment(.trailing)
+                        .disabled(state.selectedCity != nil)
+                        .accessibilityLabel("Latitude")
+                        TextField(
+                            "Lon", value: $state.longitude,
+                            format: .number.precision(.fractionLength(0...4))
+                        )
+                        .frame(width: 78)
+                        .multilineTextAlignment(.trailing)
+                        .disabled(state.selectedCity != nil)
+                        .accessibilityLabel("Longitude")
                     }
                     .textFieldStyle(.roundedBorder)
                 } label: {
                     Text("Coordinates").font(.callout)
-                    Text(state.selectedCity == nil
-                         ? "Latitude and longitude, in degrees. Negative is south and west."
-                         : "From the selected city. Choose Custom coordinates to edit.")
-                        .font(.caption).foregroundStyle(.secondary)
+                    Text(
+                        state.selectedCity == nil
+                            ? "Latitude and longitude, in degrees. Negative is south and west."
+                            : "From the selected city. Choose Custom coordinates to edit."
+                    )
+                    .font(.caption).foregroundStyle(.secondary)
                 }
             }
 
@@ -118,11 +127,14 @@ private struct GeneralTab: View {
                     .accessibilityLabel("Global shortcut")
                 } label: {
                     Text("Global shortcut")
-                    Text(state.hotKeyConflict
-                         ? "That shortcut is already taken by another app — pick a different one."
-                         : "Toggle dimming from anywhere, without opening the menu.")
-                        .font(.caption)
-                        .foregroundStyle(state.hotKeyConflict ? Color.orange : Color.secondary)
+                    Text(
+                        state.hotKeyConflict
+                            ? "That shortcut is already taken by another app — pick a different one."
+                            : "Toggle dimming from anywhere, without opening the menu."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(
+                        state.hotKeyConflict ? Color.orange : Color.secondary)
                 }
             }
 
@@ -132,12 +144,14 @@ private struct GeneralTab: View {
                         showCalibration = true
                     }
                     .disabled(state.controller == nil)
-                    .accessibilityHint("Runs the guided calibration for this Mac. Takes about a minute.")
+                    .accessibilityHint(
+                        "Runs the guided calibration for this Mac. Takes about a minute.")
                 } label: {
                     Text("Calibrate for this Mac")
                     Text(calibrationSubtitle)
                         .font(.caption)
-                        .foregroundStyle(state.isCalibrated ? Color.secondary : Color.orange)
+                        .foregroundStyle(
+                            state.isCalibrated ? Color.secondary : Color.orange)
                 }
             }
 
@@ -145,12 +159,15 @@ private struct GeneralTab: View {
                 LabeledContent {
                     Button("Reset…") { state.resetToDefaults() }
                         .accessibilityLabel("Reset to defaults")
-                        .accessibilityHint("Clears saved settings and shows the setup screen again.")
+                        .accessibilityHint(
+                            "Clears saved settings and shows the setup screen again.")
                 } label: {
                     Text("Reset to defaults")
-                    Text("Clears saved settings and shows the setup screen again. Your Launch-at-login choice is left unchanged.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Text(
+                        "Clears saved settings and shows the setup screen again. Your Launch-at-login choice is left unchanged."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
             }
         }
@@ -171,17 +188,19 @@ private struct GeneralTab: View {
 
     private var locationSubtitle: String {
         guard state.hasLocation else {
-            return "Pick your city, or enter coordinates. Only needed for the Sunset → sunrise schedule."
+            return
+                "Pick your city, or enter coordinates. Only needed for the Sunset → sunrise schedule."
         }
         if let t = state.solarTimes {
             switch t.condition {
-            case .polarDay:   return "Today the sun doesn't set at this location."
+            case .polarDay: return "Today the sun doesn't set at this location."
             case .polarNight: return "Today the sun doesn't rise at this location."
             case .normal:
                 let f = DateFormatter(); f.timeStyle = .short; f.dateStyle = .none
                 let rise = t.sunrise.map(f.string(from:)) ?? "—"
                 let set = t.sunset.map(f.string(from:)) ?? "—"
-                return "Today: sunrise \(rise), sunset \(set). Computed on this Mac — never sent anywhere."
+                return
+                    "Today: sunrise \(rise), sunset \(set). Computed on this Mac — never sent anywhere."
             }
         }
         return "Computed on this Mac — never sent anywhere."
@@ -195,7 +214,8 @@ private struct GeneralTab: View {
             }
             return s
         }
-        return "Not calibrated. Sublight is using defaults measured on a different Mac — they may be wrong for yours."
+        return
+            "Not calibrated. Sublight is using defaults measured on a different Mac — they may be wrong for yours."
     }
 }
 
@@ -209,10 +229,12 @@ private struct SafetyTab: View {
             Section {
                 Text("Photosensitive seizure warning")
                     .font(.headline)
-                Text("Sublight dims by rapidly modulating the backlight, producing flicker between roughly 2 and 8 Hz — a range that can trigger seizures in people with photosensitive epilepsy. The light is small, dim, and in peripheral vision, so risk is low, but if you have any history of photosensitivity or epilepsy, do not use this app.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(
+                    "Sublight dims by rapidly modulating the backlight, producing flicker between roughly 2 and 8 Hz — a range that can trigger seizures in people with photosensitive epilepsy. The light is small, dim, and in peripheral vision, so risk is low, but if you have any history of photosensitivity or epilepsy, do not use this app."
+                )
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             }
 
             Section {
@@ -221,21 +243,25 @@ private struct SafetyTab: View {
                         .accessibilityLabel("Show the introduction again")
                 } label: {
                     Text("Consent")
-                    Text(state.consentGranted
-                         ? "Given — you accepted the safety notice before dimming was first enabled."
-                         : "Not yet given — Sublight will ask before it first dims the keyboard.")
-                        .font(.caption)
-                        .foregroundStyle(state.consentGranted ? Color.green : Color.orange)
+                    Text(
+                        state.consentGranted
+                            ? "Given — you accepted the safety notice before dimming was first enabled."
+                            : "Not yet given — Sublight will ask before it first dims the keyboard."
+                    )
+                    .font(.caption)
+                    .foregroundStyle(state.consentGranted ? Color.green : Color.orange)
                 }
             }
 
             Section {
                 Text("Effects are unproven")
                     .font(.subheadline).bold()
-                Text("Flickering light produces a measurable response in the visual cortex, but there is no reliable evidence it improves mood, focus, or sleep. Sublight makes no such claim, and it is not a medical device.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(
+                    "Flickering light produces a measurable response in the visual cortex, but there is no reliable evidence it improves mood, focus, or sleep. Sublight makes no such claim, and it is not a medical device."
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             }
         }
         .formStyle(.grouped)
@@ -282,7 +308,8 @@ private struct DiagnosticsTab: View {
                 Spacer()
                 Button(copied ? "Copied" : "Copy") {
                     NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(state.diagnosticsReport, forType: .string)
+                    NSPasteboard.general.setString(
+                        state.diagnosticsReport, forType: .string)
                     copied = true
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2) { copied = false }
                 }
@@ -300,15 +327,19 @@ private struct AboutTab: View {
     @EnvironmentObject var state: AppState
 
     private static let version: String =
-        (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? SublightVersion.current
+        (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String)
+        ?? SublightVersion.current
 
     var body: some View {
         VStack(spacing: 6) {
-            Image(nsImage: NSApp.applicationIconImage ?? NSImage(systemSymbolName: "keyboard", accessibilityDescription: "Sublight")!)
-                .resizable()
-                .frame(width: 72, height: 72)
-                .padding(.top, 18)
-                .accessibilityHidden(true)
+            Image(
+                nsImage: NSApp.applicationIconImage ?? NSImage(
+                    systemSymbolName: "keyboard", accessibilityDescription: "Sublight")!
+            )
+            .resizable()
+            .frame(width: 72, height: 72)
+            .padding(.top, 18)
+            .accessibilityHidden(true)
 
             Text("Sublight").font(.title2).bold()
             Text("Version \(Self.version)")

@@ -7,22 +7,28 @@
 //
 
 import XCTest
+
 @testable import SublightKit
 
 final class DitherScheduleTests: XCTestCase {
 
-    private let anchor: UInt64 = 5_000_000_000   // arbitrary uptime
+    private let anchor: UInt64 = 5_000_000_000  // arbitrary uptime
 
     func testDeadlinesAreAnchorArithmeticAcrossRepresentativePairs() {
-        let pairs: [(hz: Double, duty: Double)] = [(9, 0.5), (3, 0.15), (12, 0.85), (6, 0.3), (2, 0.6)]
+        let pairs: [(hz: Double, duty: Double)] = [
+            (9, 0.5), (3, 0.15), (12, 0.85), (6, 0.3), (2, 0.6),
+        ]
         for (hz, duty) in pairs {
             let s = DitherSchedule(anchorNanos: anchor, frequencyHz: hz, duty: duty)
             let period = UInt64(1e9 / hz)
             XCTAssertEqual(s.periodNanos, period, "\(hz) Hz period")
             for n: UInt64 in [0, 1, 7, 1000] {
-                XCTAssertEqual(s.highDeadline(cycle: n), anchor + n * period, "\(hz) Hz HIGH \(n)")
-                XCTAssertEqual(s.lowDeadline(cycle: n), anchor + n * period + UInt64(duty * Double(period)),
-                               "\(hz) Hz LOW \(n) at duty \(duty)")
+                XCTAssertEqual(
+                    s.highDeadline(cycle: n), anchor + n * period, "\(hz) Hz HIGH \(n)")
+                XCTAssertEqual(
+                    s.lowDeadline(cycle: n),
+                    anchor + n * period + UInt64(duty * Double(period)),
+                    "\(hz) Hz LOW \(n) at duty \(duty)")
             }
         }
     }
@@ -46,9 +52,12 @@ final class DitherScheduleTests: XCTestCase {
     }
 
     func testDutyIsClampedToHoldableRange() {
-        XCTAssertEqual(DitherSchedule(anchorNanos: anchor, frequencyHz: 9, duty: 0.01).duty, 0.15)
-        XCTAssertEqual(DitherSchedule(anchorNanos: anchor, frequencyHz: 9, duty: 0.99).duty, 0.85)
-        XCTAssertEqual(DitherSchedule(anchorNanos: anchor, frequencyHz: 9, duty: 0.5).duty, 0.5)
+        XCTAssertEqual(
+            DitherSchedule(anchorNanos: anchor, frequencyHz: 9, duty: 0.01).duty, 0.15)
+        XCTAssertEqual(
+            DitherSchedule(anchorNanos: anchor, frequencyHz: 9, duty: 0.99).duty, 0.85)
+        XCTAssertEqual(
+            DitherSchedule(anchorNanos: anchor, frequencyHz: 9, duty: 0.5).duty, 0.5)
         XCTAssertEqual(DitherSchedule.clampDuty(-1), 0.15)
         XCTAssertEqual(DitherSchedule.clampDuty(2), 0.85)
     }
@@ -60,7 +69,9 @@ final class DitherScheduleTests: XCTestCase {
         XCTAssertEqual(t.periodNanos, s.periodNanos)
         XCTAssertEqual(t.duty, 0.3)
         // The ON cadence is untouched by a duty change.
-        for n: UInt64 in 0...5 { XCTAssertEqual(t.highDeadline(cycle: n), s.highDeadline(cycle: n)) }
+        for n: UInt64 in 0...5 {
+            XCTAssertEqual(t.highDeadline(cycle: n), s.highDeadline(cycle: n))
+        }
     }
 
     func testNextLowIsStrictlyInTheFuture() {
@@ -95,10 +106,14 @@ final class DitherScheduleTests: XCTestCase {
     func testNextLowSkipsACycleWhoseLowAlreadyFired() {
         let ms: UInt64 = 1_000_000
         let s = DitherSchedule(anchorNanos: anchor, frequencyHz: 10, duty: 0.3)
-        let now = anchor + 2 * 100 * ms + 40 * ms                       // cycle 2, LOW (+30) already fired
-        let t = s.withDuty(0.7)                                        // new LOW at +70 would be future…
-        XCTAssertEqual(t.nextLowDeadline(after: now, lowAlreadyFiredIn: 2), anchor + 3 * 100 * ms + 70 * ms)
-        XCTAssertEqual(t.nextLowDeadline(after: now, lowAlreadyFiredIn: nil), anchor + 2 * 100 * ms + 70 * ms)
+        let now = anchor + 2 * 100 * ms + 40 * ms  // cycle 2, LOW (+30) already fired
+        let t = s.withDuty(0.7)  // new LOW at +70 would be future…
+        XCTAssertEqual(
+            t.nextLowDeadline(after: now, lowAlreadyFiredIn: 2),
+            anchor + 3 * 100 * ms + 70 * ms)
+        XCTAssertEqual(
+            t.nextLowDeadline(after: now, lowAlreadyFiredIn: nil),
+            anchor + 2 * 100 * ms + 70 * ms)
     }
 
     func testCycleIndex() {
@@ -130,8 +145,9 @@ final class DitherScheduleTests: XCTestCase {
         // Ambiguity in "nearest boundary" would let two firings share a cycle.
         for hz in [1.0, 3.0, 6.0, 7.5, 8.0, 40.0] {
             let s = schedule(hz)
-            XCTAssertLessThan(s.earlyFireGuard * 2, s.periodNanos,
-                              "guard must stay under half a period at \(hz) Hz")
+            XCTAssertLessThan(
+                s.earlyFireGuard * 2, s.periodNanos,
+                "guard must stay under half a period at \(hz) Hz")
         }
     }
 
@@ -143,8 +159,9 @@ final class DitherScheduleTests: XCTestCase {
             for early in [UInt64(1), 8_000, 15_300, 24_300, s.earlyFireGuard] {
                 for cycle in [UInt64(1), 2, 2119, 5000] {
                     let now = s.highDeadline(cycle: cycle) - early
-                    XCTAssertEqual(s.cycle(at: now), cycle,
-                                   "\(hz) Hz, cycle \(cycle), early by \(early) ns")
+                    XCTAssertEqual(
+                        s.cycle(at: now), cycle,
+                        "\(hz) Hz, cycle \(cycle), early by \(early) ns")
                 }
             }
         }
@@ -154,14 +171,16 @@ final class DitherScheduleTests: XCTestCase {
         for hz in [3.0, 7.5, 40.0] {
             let s = schedule(hz)
             let now = s.highDeadline(cycle: 100) - (s.earlyFireGuard + 1)
-            XCTAssertEqual(s.cycle(at: now), 99, "outside the guard, floor as before (\(hz) Hz)")
+            XCTAssertEqual(
+                s.cycle(at: now), 99, "outside the guard, floor as before (\(hz) Hz)")
         }
     }
 
     func testLateFiringsBinExactlyAsBefore() {
         for hz in [3.0, 6.0, 7.5, 8.0, 40.0] {
             let s = schedule(hz)
-            for late in [UInt64(0), 40_000, 80_000, 2_690_000] where late < s.periodNanos - s.earlyFireGuard {
+            for late in [UInt64(0), 40_000, 80_000, 2_690_000]
+            where late < s.periodNanos - s.earlyFireGuard {
                 let now = s.highDeadline(cycle: 42) + late
                 XCTAssertEqual(s.cycle(at: now), 42, "\(hz) Hz, late by \(late) ns")
             }
@@ -174,13 +193,15 @@ final class DitherScheduleTests: XCTestCase {
         for hz in [3.0, 6.0, 7.5, 8.0, 40.0] {
             let s = schedule(hz)
             let cycle: UInt64 = 2119
-            let now = s.highDeadline(cycle: cycle) - 15_300   // the observed magnitude
+            let now = s.highDeadline(cycle: cycle) - 15_300  // the observed magnitude
             let binned = s.cycle(at: now)
             XCTAssertEqual(binned, cycle)
             let due = s.highDeadline(cycle: binned)
-            XCTAssertLessThanOrEqual(now, due, "a punctual early firing is not late (\(hz) Hz)")
-            XCTAssertGreaterThan(s.lowDeadline(cycle: binned), now,
-                                 "err-dark must not fire on a punctual edge (\(hz) Hz)")
+            XCTAssertLessThanOrEqual(
+                now, due, "a punctual early firing is not late (\(hz) Hz)")
+            XCTAssertGreaterThan(
+                s.lowDeadline(cycle: binned), now,
+                "err-dark must not fire on a punctual edge (\(hz) Hz)")
         }
     }
 
@@ -188,7 +209,9 @@ final class DitherScheduleTests: XCTestCase {
     /// Walked over a synthetic clock with realistic jitter, indices must be
     /// strictly increasing — no cycle can ever be commanded twice.
     func testConsecutiveFiringsNeverBinToTheSameCycle() {
-        let jitter: [Int64] = [-24_300, -15_300, -8_000, -1_000, 0, 40_000, 80_000, 500_000]
+        let jitter: [Int64] = [
+            -24_300, -15_300, -8_000, -1_000, 0, 40_000, 80_000, 500_000,
+        ]
         for hz in [3.0, 6.0, 7.5, 8.0, 40.0] {
             let s = schedule(hz)
             var previous: UInt64?
@@ -198,8 +221,9 @@ final class DitherScheduleTests: XCTestCase {
                 let now = j < 0 ? base - UInt64(-j) : base + UInt64(j)
                 let binned = s.cycle(at: now)
                 if let previous {
-                    XCTAssertGreaterThan(binned, previous,
-                                         "\(hz) Hz: cycle \(c) with jitter \(j) ns repeated an index")
+                    XCTAssertGreaterThan(
+                        binned, previous,
+                        "\(hz) Hz: cycle \(c) with jitter \(j) ns repeated an index")
                 }
                 previous = binned
             }
@@ -210,13 +234,16 @@ final class DitherScheduleTests: XCTestCase {
     func testTheObservedFieldSkipsWouldNoLongerSkip() {
         let s = schedule(7.5)
         // Measured: handlers 15.3, 8.0 and 24.3 µs before cycles 2119, 2121, 2134.
-        for (cycle, earlyNs) in [(UInt64(2119), UInt64(15_300)),
-                                 (2121, 8_000),
-                                 (2134, 24_300)] {
+        for (cycle, earlyNs) in [
+            (UInt64(2119), UInt64(15_300)),
+            (2121, 8_000),
+            (2134, 24_300),
+        ] {
             let now = s.highDeadline(cycle: cycle) - earlyNs
             XCTAssertEqual(s.cycle(at: now), cycle, "cycle \(cycle) must bin to itself")
-            XCTAssertGreaterThan(s.lowDeadline(cycle: s.cycle(at: now)), now,
-                                 "cycle \(cycle) must not be dropped")
+            XCTAssertGreaterThan(
+                s.lowDeadline(cycle: s.cycle(at: now)), now,
+                "cycle \(cycle) must not be dropped")
         }
     }
 }

@@ -9,6 +9,7 @@
 //
 
 import XCTest
+
 @testable import SublightKit
 
 final class ConsentMarkerTests: XCTestCase {
@@ -29,7 +30,8 @@ final class ConsentMarkerTests: XCTestCase {
     }
 
     private func write(_ text: String) {
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(
+            at: dir, withIntermediateDirectories: true)
         try? Data(text.utf8).write(to: marker.fileURL)
     }
 
@@ -61,13 +63,16 @@ final class ConsentMarkerTests: XCTestCase {
 
     func testANewerConsentVersionStillCounts() {
         marker.record(version: ConsentMarker.currentVersion + 5)
-        XCTAssertTrue(marker.isGranted, "a downgrade must not re-ask someone who agreed to more")
+        XCTAssertTrue(
+            marker.isGranted, "a downgrade must not re-ask someone who agreed to more")
     }
 
     func testAnUnreadableMarkerReadsAsNotConsented() {
         write("{ this is not json")
         XCTAssertNil(marker.recordedVersion)
-        XCTAssertFalse(marker.isGranted, "a corrupt marker must fail toward asking, never toward granted")
+        XCTAssertFalse(
+            marker.isGranted,
+            "a corrupt marker must fail toward asking, never toward granted")
     }
 
     func testAnEmptyMarkerReadsAsNotConsented() {
@@ -86,7 +91,7 @@ final class ConsentMarkerTests: XCTestCase {
         XCTAssertTrue(marker.isGranted)
         marker.clear()
         XCTAssertFalse(marker.isGranted)
-        marker.clear()   // must not throw or trap on an already-absent file
+        marker.clear()  // must not throw or trap on an already-absent file
         XCTAssertFalse(marker.isGranted)
     }
 
@@ -101,8 +106,9 @@ final class ConsentMarkerTests: XCTestCase {
 
     func testPendingPersistsAndIsVisibleToAnotherInstance() {
         marker.setPending()
-        XCTAssertTrue(ConsentMarker(directory: dir).isPending,
-                      "the popover may be opened by a later launch than the one that skipped")
+        XCTAssertTrue(
+            ConsentMarker(directory: dir).isPending,
+            "the popover may be opened by a later launch than the one that skipped")
     }
 
     func testSetPendingIsIdempotent() {
@@ -111,7 +117,7 @@ final class ConsentMarkerTests: XCTestCase {
         XCTAssertTrue(marker.isPending)
         marker.clearPending()
         XCTAssertFalse(marker.isPending)
-        marker.clearPending()   // must not throw on an already-absent flag
+        marker.clearPending()  // must not throw on an already-absent flag
         XCTAssertFalse(marker.isPending)
     }
 
@@ -125,7 +131,7 @@ final class ConsentMarkerTests: XCTestCase {
     func testClearingConsentAlsoClearsPending() {
         marker.setPending()
         marker.record()
-        marker.setPending()          // as if a later schedule fired post-reset
+        marker.setPending()  // as if a later schedule fired post-reset
         marker.clear()
         XCTAssertFalse(marker.isGranted)
         XCTAssertFalse(marker.isPending)
@@ -139,7 +145,8 @@ final class ConsentMarkerTests: XCTestCase {
     }
 
     func testTheCurrentVersionIsOne() {
-        XCTAssertEqual(ConsentMarker.currentVersion, 1,
-                       "bump this deliberately, together with the alert copy")
+        XCTAssertEqual(
+            ConsentMarker.currentVersion, 1,
+            "bump this deliberately, together with the alert copy")
     }
 }

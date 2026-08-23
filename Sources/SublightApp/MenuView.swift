@@ -12,9 +12,9 @@
 //  Licensed under the Apache License 2.0 — see LICENSE.
 //
 
-import SwiftUI
 import AppKit
 import SublightKit
+import SwiftUI
 
 struct MenuView: View {
 
@@ -52,7 +52,8 @@ struct MenuView: View {
                 .fixedSize(horizontal: false, vertical: true)
             Button("Review and enable") { state.reviewConsentAndEnable() }
                 .controlSize(.small)
-                .accessibilityHint("Shows the safety information and, if you accept, starts dimming.")
+                .accessibilityHint(
+                    "Shows the safety information and, if you accept, starts dimming.")
         }
         .padding(9)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -104,9 +105,11 @@ struct MenuView: View {
         openSettings()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
             NSApp.activate(ignoringOtherApps: true)
-            guard let window = NSApp.windows.first(where: {
-                $0.canBecomeMain && $0.isVisible
-            }) else { return }
+            guard
+                let window = NSApp.windows.first(where: {
+                    $0.canBecomeMain && $0.isVisible
+                })
+            else { return }
             window.makeKeyAndOrderFront(nil)
             window.orderFrontRegardless()
         }
@@ -117,11 +120,14 @@ struct MenuView: View {
     private var unavailableView: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Backlight engine unavailable").font(.subheadline)
-            Text("Sublight requires an Apple Silicon MacBook with a backlit keyboard. It does not run on Intel Macs or with external keyboards.")
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            Text(
+                "Sublight requires an Apple Silicon MacBook with a backlit keyboard. It does not run on Intel Macs or with external keyboards."
+            )
+            .font(.caption).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
             if !state.statusText.isEmpty {
-                Text(state.statusText).font(.caption2).foregroundStyle(.tertiary).textSelection(.enabled)
+                Text(state.statusText).font(.caption2).foregroundStyle(.tertiary)
+                    .textSelection(.enabled)
             }
         }
     }
@@ -160,9 +166,12 @@ struct MenuView: View {
 
     private var simpleControls: some View {
         VStack(alignment: .leading, spacing: 9) {
-            Toggle("Dim keyboard below minimum",
-                   isOn: Binding(get: { state.isEnabled }, set: { state.setEnabled($0) }))
-                .accessibilityHint("Dims the built-in backlight below the system's lowest setting.")
+            Toggle(
+                "Dim keyboard below minimum",
+                isOn: Binding(get: { state.isEnabled }, set: { state.setEnabled($0) })
+            )
+            .accessibilityHint(
+                "Dims the built-in backlight below the system's lowest setting.")
             if state.isEnabled { brightnessSlider }
             Text("Dims the built-in backlight below the system's lowest setting.")
                 .font(.caption2).foregroundStyle(.tertiary)
@@ -172,9 +181,12 @@ struct MenuView: View {
 
     private var advancedControls: some View {
         VStack(alignment: .leading, spacing: 9) {
-            Toggle("Dim keyboard",
-                   isOn: Binding(get: { state.isEnabled }, set: { state.setEnabled($0) }))
-                .accessibilityHint("Dims the backlight below the system minimum at the chosen frequency.")
+            Toggle(
+                "Dim keyboard",
+                isOn: Binding(get: { state.isEnabled }, set: { state.setEnabled($0) })
+            )
+            .accessibilityHint(
+                "Dims the backlight below the system minimum at the chosen frequency.")
 
             if state.isEnabled {
                 HStack {
@@ -190,12 +202,16 @@ struct MenuView: View {
                             .buttonStyle(.bordered)
                             .controlSize(.small)
                             .accessibilityLabel("\(preset.label) preset")
-                            .accessibilityHint("Sets the frequency to \(Int(preset.hz)) hertz.")
+                            .accessibilityHint(
+                                "Sets the frequency to \(Int(preset.hz)) hertz.")
                     }
                 }
-                Slider(value: $state.frequencyHz, in: AppState.freqMin...AppState.freqMax, step: 0.5)
-                    .accessibilityLabel("Frequency")
-                    .accessibilityValue(String(format: "%.1f hertz", state.frequencyHz))
+                Slider(
+                    value: $state.frequencyHz, in: AppState.freqMin...AppState.freqMax,
+                    step: 0.5
+                )
+                .accessibilityLabel("Frequency")
+                .accessibilityValue(String(format: "%.1f hertz", state.frequencyHz))
                 Text(state.associationText)
                     .font(.caption2).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -235,14 +251,20 @@ struct MenuView: View {
                             .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
                     }
                     .accessibilityElement(children: .combine)
-                    Slider(value: $state.scheduleFrequency, in: AppState.freqMin...AppState.freqMax, step: 0.5)
-                        .accessibilityLabel("Schedule frequency")
-                        .accessibilityValue(String(format: "%.1f hertz", state.scheduleFrequency))
+                    Slider(
+                        value: $state.scheduleFrequency,
+                        in: AppState.freqMin...AppState.freqMax, step: 0.5
+                    )
+                    .accessibilityLabel("Schedule frequency")
+                    .accessibilityValue(
+                        String(format: "%.1f hertz", state.scheduleFrequency))
                 }
 
-                Text("Dims automatically during these hours. You can still switch it on or off by hand at any time.")
-                    .font(.caption2).foregroundStyle(.tertiary)
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(
+                    "Dims automatically during these hours. You can still switch it on or off by hand at any time."
+                )
+                .font(.caption2).foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -250,15 +272,27 @@ struct MenuView: View {
     private var fixedTimeRows: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Text("From").font(.caption).foregroundStyle(.secondary).frame(width: 44, alignment: .leading)
-                DatePicker("", selection: Binding(get: { state.scheduleStartDate }, set: { state.scheduleStartDate = $0 }),
-                           displayedComponents: .hourAndMinute).labelsHidden()
+                Text("From").font(.caption).foregroundStyle(.secondary).frame(
+                    width: 44, alignment: .leading)
+                DatePicker(
+                    "",
+                    selection: Binding(
+                        get: { state.scheduleStartDate },
+                        set: { state.scheduleStartDate = $0 }),
+                    displayedComponents: .hourAndMinute
+                ).labelsHidden()
                     .accessibilityLabel("Dim from")
             }
             HStack {
-                Text("To").font(.caption).foregroundStyle(.secondary).frame(width: 44, alignment: .leading)
-                DatePicker("", selection: Binding(get: { state.scheduleEndDate }, set: { state.scheduleEndDate = $0 }),
-                           displayedComponents: .hourAndMinute).labelsHidden()
+                Text("To").font(.caption).foregroundStyle(.secondary).frame(
+                    width: 44, alignment: .leading)
+                DatePicker(
+                    "",
+                    selection: Binding(
+                        get: { state.scheduleEndDate },
+                        set: { state.scheduleEndDate = $0 }),
+                    displayedComponents: .hourAndMinute
+                ).labelsHidden()
                     .accessibilityLabel("Dim until")
             }
         }
@@ -288,11 +322,15 @@ struct MenuView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("Sunset \(Self.time(times.sunset)), sunrise \(Self.time(times.sunrise))")
+                .accessibilityLabel(
+                    "Sunset \(Self.time(times.sunset)), sunrise \(Self.time(times.sunrise))"
+                )
             case .polarDay:
-                Text("The sun doesn't set at your location today — the schedule stays off.")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                Text(
+                    "The sun doesn't set at your location today — the schedule stays off."
+                )
+                .font(.caption).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             case .polarNight:
                 Text("The sun doesn't rise at your location today — dimming stays on.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -322,10 +360,14 @@ struct MenuView: View {
             }
             .accessibilityElement(children: .combine)
             Spacer()
-            Button { showSettings() } label: { Text("Calibrate").font(.caption) }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .accessibilityHint("Opens Settings, where calibration runs.")
+            Button {
+                showSettings()
+            } label: {
+                Text("Calibrate").font(.caption)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .accessibilityHint("Opens Settings, where calibration runs.")
         }
     }
 

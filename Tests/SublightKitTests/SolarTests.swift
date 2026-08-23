@@ -13,6 +13,7 @@
 //
 
 import XCTest
+
 @testable import SublightKit
 
 final class SolarTests: XCTestCase {
@@ -34,8 +35,10 @@ final class SolarTests: XCTestCase {
         return f.string(from: date)
     }
 
-    private func assertTime(_ actual: Date?, _ expected: String, tz: Int,
-                            file: StaticString = #filePath, line: UInt = #line) {
+    private func assertTime(
+        _ actual: Date?, _ expected: String, tz: Int,
+        file: StaticString = #filePath, line: UInt = #line
+    ) {
         guard let actual else {
             return XCTFail("expected \(expected), got no time", file: file, line: line)
         }
@@ -45,26 +48,30 @@ final class SolarTests: XCTestCase {
             let p = s.split(separator: ":").compactMap { Int($0) }
             return p[0] * 60 + p[1]
         }
-        XCTAssertLessThanOrEqual(abs(minutes(got) - minutes(expected)), 2,
-                                 "expected ~\(expected), got \(got)", file: file, line: line)
+        XCTAssertLessThanOrEqual(
+            abs(minutes(got) - minutes(expected)), 2,
+            "expected ~\(expected), got \(got)", file: file, line: line)
     }
 
     func testSanFranciscoMidsummer() {
-        let t = Solar.times(latitude: 37.7749, longitude: -122.4194,
-                            date: noonUTC(2026, 7, 24))
+        let t = Solar.times(
+            latitude: 37.7749, longitude: -122.4194,
+            date: noonUTC(2026, 7, 24))
         XCTAssertEqual(t.condition, .normal)
         assertTime(t.sunrise, "06:06", tz: -7)
         assertTime(t.sunset, "20:25", tz: -7)
     }
 
     func testLondonSolstices() {
-        let summer = Solar.times(latitude: 51.5074, longitude: -0.1278,
-                                 date: noonUTC(2026, 6, 21))
+        let summer = Solar.times(
+            latitude: 51.5074, longitude: -0.1278,
+            date: noonUTC(2026, 6, 21))
         assertTime(summer.sunrise, "04:43", tz: 1)
         assertTime(summer.sunset, "21:21", tz: 1)
 
-        let winter = Solar.times(latitude: 51.5074, longitude: -0.1278,
-                                 date: noonUTC(2026, 12, 21))
+        let winter = Solar.times(
+            latitude: 51.5074, longitude: -0.1278,
+            date: noonUTC(2026, 12, 21))
         assertTime(winter.sunrise, "08:03", tz: 0)
         assertTime(winter.sunset, "15:53", tz: 0)
     }
@@ -72,21 +79,24 @@ final class SolarTests: XCTestCase {
     /// Southern hemisphere, and a negative-longitude/positive-longitude mix —
     /// the classic place for sign errors to hide.
     func testSydneyMidwinter() {
-        let t = Solar.times(latitude: -33.8688, longitude: 151.2093,
-                            date: noonUTC(2026, 7, 24))
+        let t = Solar.times(
+            latitude: -33.8688, longitude: 151.2093,
+            date: noonUTC(2026, 7, 24))
         XCTAssertEqual(t.condition, .normal)
         assertTime(t.sunrise, "06:53", tz: 10)
         assertTime(t.sunset, "17:09", tz: 10)
     }
 
     func testPolarDayAndNight() {
-        let midsummer = Solar.times(latitude: 69.6492, longitude: 18.9553,
-                                    date: noonUTC(2026, 6, 21))
+        let midsummer = Solar.times(
+            latitude: 69.6492, longitude: 18.9553,
+            date: noonUTC(2026, 6, 21))
         XCTAssertEqual(midsummer.condition, .polarDay)
         XCTAssertNil(midsummer.sunrise)
 
-        let midwinter = Solar.times(latitude: 69.6492, longitude: 18.9553,
-                                    date: noonUTC(2026, 12, 21))
+        let midwinter = Solar.times(
+            latitude: 69.6492, longitude: 18.9553,
+            date: noonUTC(2026, 12, 21))
         XCTAssertEqual(midwinter.condition, .polarNight)
         XCTAssertNil(midwinter.sunset)
     }
@@ -120,13 +130,16 @@ final class SolarTests: XCTestCase {
             var cal = Calendar(identifier: .gregorian)
             cal.timeZone = TimeZone(identifier: place.tz)!
             for month in 1...12 {
-                let t = Solar.times(latitude: place.lat, longitude: place.lon,
-                                    date: noonUTC(2026, month, 15))
+                let t = Solar.times(
+                    latitude: place.lat, longitude: place.lon,
+                    date: noonUTC(2026, month, 15))
                 guard t.condition == .normal,
-                      let rise = t.sunrise, let set = t.sunset else { continue }
-                XCTAssertGreaterThan(Solar.minutesOfDay(set, calendar: cal),
-                                     Solar.minutesOfDay(rise, calendar: cal),
-                                     "\(place.tz) month \(month)")
+                    let rise = t.sunrise, let set = t.sunset
+                else { continue }
+                XCTAssertGreaterThan(
+                    Solar.minutesOfDay(set, calendar: cal),
+                    Solar.minutesOfDay(rise, calendar: cal),
+                    "\(place.tz) month \(month)")
             }
         }
     }

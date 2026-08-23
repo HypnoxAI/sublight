@@ -9,6 +9,7 @@
 //
 
 import XCTest
+
 @testable import SublightKit
 
 final class LatencyStatsTests: XCTestCase {
@@ -28,7 +29,7 @@ final class LatencyStatsTests: XCTestCase {
         XCTAssertEqual(s.count, 100)
         XCTAssertEqual(s.maxMs, 100)
         XCTAssertEqual(s.meanMs, 50.5, accuracy: 1e-9)
-        XCTAssertEqual(s.p50Ms, 50)      // nearest rank: ceil(0.50 * 100) = 50th
+        XCTAssertEqual(s.p50Ms, 50)  // nearest rank: ceil(0.50 * 100) = 50th
         XCTAssertEqual(s.p95Ms, 95)
         XCTAssertEqual(s.percentileMs(0), 1)
         XCTAssertEqual(s.percentileMs(1), 100)
@@ -61,13 +62,14 @@ final class EngineCountersTests: XCTestCase {
         var e = EdgeCounters()
         e.scheduled = 100; e.fired = 93
         XCTAssertEqual(e.coalesced, 7)
-        e.fired = 120                      // can't happen, must not wrap
+        e.fired = 120  // can't happen, must not wrap
         XCTAssertEqual(e.coalesced, 0)
     }
 
     func testReportNamesEveryColumnTheDiagnosisNeeds() {
         var c = EngineCounters()
-        c.high.scheduled = 270; c.high.fired = 270; c.high.executed = 257; c.high.skipped = 13
+        c.high.scheduled = 270; c.high.fired = 270; c.high.executed = 257;
+        c.high.skipped = 13
         c.low.scheduled = 270; c.low.fired = 270; c.low.executed = 270
         c.skipMaxLatenessMs = 41.2
         c.skipLastThresholdMs = 16.67
@@ -79,8 +81,10 @@ final class EngineCountersTests: XCTestCase {
         c.commandsByKind["brightness"] = 527
 
         let r = c.report()
-        for needle in ["HIGH", "LOW", "scheduled", "fired", "executed", "skipped", "coalesced",
-                       "err-dark skips: 13", "longest burst 5", "583.4", "brightness=527"] {
+        for needle in [
+            "HIGH", "LOW", "scheduled", "fired", "executed", "skipped", "coalesced",
+            "err-dark skips: 13", "longest burst 5", "583.4", "brightness=527",
+        ] {
             XCTAssertTrue(r.contains(needle), "report is missing \(needle):\n\(r)")
         }
     }
@@ -104,7 +108,8 @@ final class EngineCountersTests: XCTestCase {
         XCTAssertEqual(c.high.executed, 2)
         XCTAssertEqual(c.high.skipped, 3)
         XCTAssertEqual(c.high.coalesced, 0)
-        XCTAssertEqual(c.skipMaxRunLength, 3, "three consecutive skips is a 3-cycle dark envelope")
+        XCTAssertEqual(
+            c.skipMaxRunLength, 3, "three consecutive skips is a 3-cycle dark envelope")
         XCTAssertEqual(c.skipMaxLatenessMs, 23, accuracy: 1e-9)
         XCTAssertEqual(c.skipLastThresholdMs, 16.67, accuracy: 1e-9)
         XCTAssertEqual(c.longestExecutedHighGapMs, 500, accuracy: 1e-6)
@@ -126,14 +131,15 @@ final class EngineCountersTests: XCTestCase {
     func testScheduledSurvivesAnAnchorResetByFoldingTheRunIntoABase() {
         let d = EngineDiagnostics()
         d.noteAnchorReset(periodNanos: 50_000_000, onWindowNanos: 7_500_000)
-        d.noteHighEdge(cycle: 9)                  // ten deadlines in run 1
+        d.noteHighEdge(cycle: 9)  // ten deadlines in run 1
         d.noteLowEdge(cycle: 9)
         d.noteAnchorReset(periodNanos: 50_000_000, onWindowNanos: 7_500_000)
-        d.noteHighEdge(cycle: 4)                  // cycle index restarts at 0
+        d.noteHighEdge(cycle: 4)  // cycle index restarts at 0
         d.noteLowEdge(cycle: 4)
 
         let c = d.snapshot()
-        XCTAssertEqual(c.high.scheduled, 15, "10 from the first anchor + 5 from the second")
+        XCTAssertEqual(
+            c.high.scheduled, 15, "10 from the first anchor + 5 from the second")
         XCTAssertEqual(c.low.scheduled, 15)
         XCTAssertEqual(c.high.fired, 2, "fired counts handler runs, not deadlines")
     }
@@ -144,14 +150,16 @@ final class EngineCountersTests: XCTestCase {
         let url = dir.appendingPathComponent(DiagnosticsStore.fileName)
         defer { try? FileManager.default.removeItem(at: dir) }
 
-        XCTAssertNil(DiagnosticsStore.load(from: url), "absent file reads as nil, not a crash")
+        XCTAssertNil(
+            DiagnosticsStore.load(from: url), "absent file reads as nil, not a crash")
 
         var counters = EngineCounters()
         counters.high.executed = 42
         counters.skipMaxRunLength = 5
         counters.latency.record(1.25)
-        let record = DiagnosticsRecord(label: "hold 9 Hz duty 0.15", counters: counters,
-                                       recordedAt: Date(timeIntervalSince1970: 1_700_000_000), pid: 4242)
+        let record = DiagnosticsRecord(
+            label: "hold 9 Hz duty 0.15", counters: counters,
+            recordedAt: Date(timeIntervalSince1970: 1_700_000_000), pid: 4242)
 
         XCTAssertTrue(DiagnosticsStore.save(record, to: url))
         let back = try XCTUnwrap(DiagnosticsStore.load(from: url))
@@ -165,7 +173,8 @@ final class WritePaddingTests: XCTestCase {
         let floor: Float = 0.0625
         let pad: Float = 0.002
         let up = KeyboardBrightnessBridge.paddedValue(floor, pad: pad)
-        XCTAssertNotEqual(up, floor, "a padded write must differ, or a dedupe swallows it")
+        XCTAssertNotEqual(
+            up, floor, "a padded write must differ, or a dedupe swallows it")
         XCTAssertGreaterThanOrEqual(up, floor)
         XCTAssertLessThan(up, floor + 0.0625, "must not cross into the next 1/16 step")
 

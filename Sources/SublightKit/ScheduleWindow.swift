@@ -45,8 +45,10 @@ public enum ScheduleWindow {
     }
 
     /// Minutes since local midnight for a given date.
-    public static func minutesOfDay(_ date: Date = Date(),
-                                    calendar: Calendar = .current) -> Int {
+    public static func minutesOfDay(
+        _ date: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Int {
         let c = calendar.dateComponents([.hour, .minute], from: date)
         return (c.hour ?? 0) * 60 + (c.minute ?? 0)
     }
