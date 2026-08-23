@@ -10,6 +10,19 @@ stability on.
 
 ## [Unreleased]
 
+### Fixed
+- **Every err-dark skip the engine ever recorded was a bug, and it is gone.**
+  `DitherSchedule.cycle(at:)` was plain integer division, so a `.strict` timer
+  firing microseconds *before* its deadline was binned into the previous cycle;
+  the engine then measured a lateness of nearly a whole period and dropped a
+  perfectly punctual edge. Measured: normal edges land 40–80 µs after their
+  deadline, the skipped ones 8–24 µs before it, with the cadence through each
+  skip exactly nominal — nothing had stalled. `cycle(at:)` now bins forward
+  within an early-fire guard (2 ms, twice the timer leeway, clamped to a quarter
+  period). A 300 s soak at 7.5 Hz that previously dropped cycles now executes
+  **2251 of 2251 HIGH edges with zero skips**. The rule itself is untouched and
+  still fires on genuinely late edges.
+
 ### Changed
 - **The 60 s suppression keeper is retained, and its provisional status is
   resolved.** It carried a deletion criterion: remove it if no "flag flipped

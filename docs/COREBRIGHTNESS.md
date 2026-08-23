@@ -310,16 +310,61 @@ times in 9,270 edges (0.054 %)**, all within a single five-minute soak at 7.5 Hz
 
 Each was an **isolated single dropped cycle** — burst length 1, longest gap
 between executed ON commands 266.7 ms (exactly two periods), maximum lateness
-≈133 ms (about one period). Daemon latency was normal throughout that run (p50
-0.164 ms, max 2.94 ms), so the engine queue stalled, not the daemon. The
-observer reported the run as clean at all three glances: one extra dark cycle
-roughly per minute is not perceptible against a dither that is already dark for
-113 ms of every 133 ms.
+≈133 ms (about one period). The observer reported the run as clean at all three
+glances: one extra dark cycle roughly per minute is not perceptible against a
+dither that is already dark for 113 ms of every 133 ms.
 
-The obvious suspect was **refuted**: the 60 s suppression keeper fired exactly
-five times in each of three five-minute soaks, and only one of them skipped.
-Keeper firings are not sufficient to cause a skip. Most likely ambient system
-activity; recorded rather than explained.
+> **RETRACTED 2026-08-23.** This section previously concluded, from normal
+> daemon latency, that *"the engine queue stalled, not the daemon"*, and put the
+> cause down to ambient system activity. **That was wrong.** The queue never
+> stalled. Reproducing the soak and reading the per-edge timestamps against the
+> anchor showed the three skips were punctual edges that fired **8–24
+> microseconds EARLY**, and `DitherSchedule.cycle(at:)` floored them into the
+> previous cycle — so the engine measured a lateness of very nearly one whole
+> period and dropped them. The "≈133 ms lateness" that looked like evidence of a
+> stall was the artefact itself. See below.
+
+#### What it actually was
+
+`cycle(at:)` was plain integer division. A `.strict` `DispatchSourceTimer` may
+fire marginally before its deadline; when it did, the floor landed on the
+previous cycle index, the computed lateness came out at very nearly a full
+period, and the err-dark rule discarded a perfectly on-time edge. The log made
+it visible in hindsight: the same cycle index appears twice in a row, once
+executed and once skipped — `cycle 2118 ok`, then `cycle 2118 SKIPPED`.
+
+The evidence is unambiguous. Normal edges land with a fractional cycle position
+of 0.0003–0.0006 (40–80 µs *after* the deadline); all three skips sat at
+0.9998–0.9999, i.e. 8–24 µs *before* the next one. The cadence through each skip
+was exactly nominal — 21 ms ON, 112–113 ms OFF — and LOW edges never exceeded
+2.33 ms late anywhere in the run. Nothing stalled.
+
+This was the **sole source of every err-dark skip ever recorded**: 5 in the
+original soak, 3 in its reproduction, and none from any other cause.
+
+#### Fixed
+
+`cycle(at:)` now bins a firing forward when it lands within an early-fire guard
+of the next boundary, and floors otherwise. The guard is 2 ms — twice the
+scheduled timer leeway, about a hundred times the largest early-fire observed —
+clamped to a quarter of the period so it stays a small, unambiguous fraction of
+a cycle even at the top of the research range.
+
+Verification, 7.5 Hz / duty 0.15 / 300 s: **2251 of 2251 HIGH edges executed,
+zero skipped, zero coalesced**, longest gap between executed ON commands 135.7 ms
+against a 133.3 ms nominal (it was 266.7 ms — a whole dropped cycle — before).
+The steady-state err-dark skip rate is now expected to be **zero**.
+
+The rule itself still works, and still matters: a 40 Hz research run — far above
+the product ceiling, with a 3.75 ms ON window — skipped two edges that were
+genuinely 12.6 ms and 4.1 ms late. Those are real stalls and err-dark is right
+to drop them. What has been retired is the class of skip that was never late at
+all.
+
+The keeper was **correctly acquitted** as the cause, though for the wrong
+reason: it fired exactly five times in each of three five-minute soaks and only
+one of them skipped. It is unrelated to this defect — and, as finding 5 records,
+it turned out to be load-bearing for an entirely different reason.
 
 ---
 

@@ -74,9 +74,44 @@ public struct DitherSchedule: Equatable {
         DitherSchedule(anchorNanos: anchorNanos, periodNanos: periodNanos, duty: newDuty)
     }
 
-    /// The cycle index `now` falls in (0 before the anchor).
+    /// How far BEFORE a cycle boundary a firing still counts as being that
+    /// boundary rather than the tail end of the previous cycle.
+    ///
+    /// A `.strict` DispatchSourceTimer may fire marginally early. Measured on
+    /// the reference machine, punctual HIGH edges land 40-80 µs *after* their
+    /// deadline, but a small fraction land 8-24 µs *before* it. Plain integer
+    /// division floors those into the PREVIOUS cycle, which made the engine
+    /// compute a lateness of very nearly one whole period and drop the edge
+    /// under the err-dark rule — a punctual firing discarded as catastrophically
+    /// late. That was the sole source of every err-dark skip ever recorded
+    /// (5 in a 5-minute soak, then 3 in its reproduction).
+    ///
+    /// 2 ms is chosen as twice the 1 ms leeway the edge timers are scheduled
+    /// with, which is the largest early-fire the scheduler is permitted to
+    /// produce, and roughly a hundred times the largest early-fire actually
+    /// observed. The `periodNanos / 4` clamp keeps it a small fraction of the
+    /// cycle even at the top of the research range reachable through
+    /// `--allow-unstable` (40 Hz, a 25 ms period, where 2 ms is 8 % of a
+    /// cycle); the clamp also guarantees the guard is always well under half a
+    /// period, so binning to the nearest boundary can never be ambiguous and
+    /// two consecutive firings can never land on the same cycle index.
+    public static let earlyFireGuardNanos: UInt64 = 2_000_000
+
+    /// The effective guard for this schedule's period.
+    public var earlyFireGuard: UInt64 { min(Self.earlyFireGuardNanos, periodNanos / 4) }
+
+    /// The cycle index `now` belongs to (0 before the anchor).
+    ///
+    /// Not a plain floor: a firing within `earlyFireGuard` of the next boundary
+    /// is binned FORWARD to that boundary, because it is a punctual edge that
+    /// arrived a few microseconds early, not a wildly late one. See
+    /// `earlyFireGuardNanos` for why, and what it cost before.
     public func cycle(at now: UInt64) -> UInt64 {
-        now <= anchorNanos ? 0 : (now - anchorNanos) / periodNanos
+        guard now > anchorNanos else { return 0 }
+        let elapsed = now - anchorNanos
+        let floored = elapsed / periodNanos
+        let intoCycle = elapsed - floored * periodNanos
+        return (periodNanos - intoCycle) <= earlyFireGuard ? floored + 1 : floored
     }
 
     /// The next LOW deadline strictly after `now`: the smallest
