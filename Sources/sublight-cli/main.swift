@@ -43,6 +43,8 @@ func printUsage() {
       sublight-cli dither-test --fine [--duty d]  Fine 6–15 Hz sweep with a floor A/B at each
                                               step, to judge dimness (WATCH THE KEYS)
       sublight-cli hold <0..1> [options]      Dither-hold a sub-minimum level (Ctrl-C restores)
+      sublight-cli pair-sweep --on-ms <X>     DIAGNOSTIC: raw ON/OFF pairs straight at the
+                                              bridge (engine bypassed) — one ON-window per run
       sublight-cli pulse <low|medium|high>     Continuous pulse preset (~5/6/10 Hz). Experimental;
                                               flickers in the photosensitive range. Ctrl-C stops.
       sublight-cli restore [<0..1>]           Panic restore (default lands at 0.30)
@@ -52,6 +54,23 @@ func printUsage() {
     HOLD OPTIONS:
       --floor <f>     Assumed system clamp floor        (default 0.0625)
       --period <s>    Dither period in seconds          (default 0.25)
+      --seconds <n>   Run for n seconds, then restore and print the command-truth
+                      counters (omit to hold until Ctrl-C)
+
+    PAIR-SWEEP OPTIONS (diagnostic; bypasses the engine):
+      --on-ms <X>     ON window in milliseconds         (required)
+      --off-ms <Y>    OFF gap in milliseconds           (default 400)
+      --seconds <n>   Duration                          (default 4)
+      --fade <int>    Use setBrightness:fadeSpeed:commit: with this fadeSpeed.
+                      Omit to use the plain setter the ENGINE uses (daemon default fade).
+      --floor <f>     Level commanded for ON            (default 0.0625)
+
+    COMMAND-TRUTH COUNTERS:
+      `status`, `hold --seconds` and `pair-sweep` print scheduled / fired / executed /
+      skipped edge counts and daemon round-trip latency. Per-command detail is in the
+      unified log at debug level:
+        log stream --level debug --predicate \
+          'subsystem == "com.hypnox.sublight" AND category == "engine"'
 
     EXIT CODES:
       0   success
@@ -94,6 +113,26 @@ func optionalPeriod(_ args: [String]) -> Double?? {
     guard let v = Double(raw), v.isFinite, v > 0 else { return nil }
     return .some(v)
 }
+/// nil = present but invalid; .some(nil) = absent; .some(.some) = a finite value.
+func optionalSeconds(_ args: [String]) -> Double?? {
+    guard let raw = flagValue(args, "--seconds") else { return .some(nil) }
+    guard let v = Double(raw), v.isFinite, v > 0 else { return nil }
+    return .some(v)
+}
+
+/// Wall-clock epoch plus the monotonic clock, on one line. Printed at the start
+/// and end of every measured run so an external recording (a 240 fps phone
+/// video, say) can be aligned frame-for-frame against the command log.
+func marker(_ label: String, extra: String = "") -> String {
+    let now = Date()
+    let iso = ISO8601DateFormatter()
+    iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return String(format: "%@  epoch=%.3f  wall=%@  uptime_ms=%.3f%@",
+                  label, now.timeIntervalSince1970, iso.string(from: now),
+                  Double(DispatchTime.now().uptimeNanoseconds) / 1e6,
+                  extra.isEmpty ? "" : "  " + extra)
+}
+
 func optionalFloor(_ args: [String]) -> Float? {
     guard let raw = flagValue(args, "--floor") else { return 0.0625 }
     guard let v = Float(raw), v.isFinite, v > 0 else { return nil }
@@ -371,6 +410,20 @@ case "status":
         print("idle-dimmed      : \(dimmed)")
     }
     print("assumed floor    : \(String(format: "%.4f", c.floor))  (verify with `probe`)")
+
+    // Command-truth counters. This process has not driven any edges, so the
+    // live tally is empty by construction — what is worth reading is the last
+    // recorded run, written by `hold --seconds` / `pair-sweep`.
+    print("\ncommand-truth counters (this process):")
+    print(c.engine.counters.report())
+    if let last = DiagnosticsStore.load() {
+        let iso = ISO8601DateFormatter()
+        print("\nlast recorded run: \(last.label)")
+        print("  recorded \(iso.string(from: last.recordedAt))  pid \(last.pid)  (\(DiagnosticsStore.defaultURL.path))")
+        print(last.counters.report())
+    } else {
+        print("\nlast recorded run: none (run `hold --seconds n` or `pair-sweep`)")
+    }
     exit(0)
 
 case "ids":
@@ -618,17 +671,156 @@ case "hold":
     }
     guard let c = makeController(args: args) else { exit(2) }
 
+    guard let seconds = optionalSeconds(args) else {
+        fputs("error: --seconds must be a finite number > 0\n", stderr)
+        exit(1)
+    }
+
     print("Holding level \(String(format: "%.4f", value)) (floor \(String(format: "%.4f", c.floor)), period \(c.period)s).")
     if value < c.floor && value > 0 {
         print("Sub-minimum zone → dither engine active. Watch for flicker; tune --period.")
     } else {
         print("At/above floor (or zero) → plain direct set, no dithering.")
     }
-    print("Ctrl-C restores auto-brightness and lands at the floor.\n")
+    if seconds == nil { print("Ctrl-C restores auto-brightness and lands at the floor.\n") }
 
     installRestoreOnSignal(c, level: max(c.floor, 0.2))
+
+    // Bracket the measurement: zero the tally on the engine queue, so it is
+    // ordered strictly before the start block setLevel is about to enqueue.
+    EngineQueue.run { EngineDiagnostics.shared.reset() }
+    let holdStart = Date()
+    print(marker("RUN START"))
     c.setLevel(value)
+
+    // A no-op hop drains the queue behind setLevel's async start, so the state
+    // read below is the settled one.
+    EngineQueue.run { }
+    let resolved = c.engine.state
+    if case .running(let hz, let duty) = resolved {
+        print(String(format: "engine: %.4f Hz  duty %.4f  period %.2f ms  ON window %.2f ms",
+                     hz, duty, 1000.0 / hz, duty * 1000.0 / hz))
+    } else {
+        print("engine: stopped (direct set path)")
+    }
+
+    if let seconds {
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) {
+            // Snapshot BEFORE the restore, so the restore's own three commands
+            // do not land in the run's latency distribution — and ON the engine
+            // queue, so it cannot land mid-edge and report a HIGH as fired but
+            // not yet executed.
+            let snap = EngineQueue.run { c.engine.counters }
+            c.engine.restoreNow(force: false)
+            let elapsed = Date().timeIntervalSince(holdStart)
+            print(marker("RUN STOP", extra: String(format: "elapsed=%.3fs", elapsed)))
+            print(snap.report())
+            var label = String(format: "hold %.4f", value)
+            if case .running(let hz, let duty) = resolved {
+                label = String(format: "hold %.3f Hz duty %.3f for %.0f s", hz, duty, seconds)
+            }
+            if DiagnosticsStore.save(DiagnosticsRecord(label: label, counters: snap)) {
+                print("saved: \(DiagnosticsStore.defaultURL.path)")
+            }
+            exit(0)
+        }
+    }
     dispatchMain()
+
+case "pair-sweep":
+    // DIAGNOSTIC INSTRUMENT, not a product path. Same shape as the `dither-test`
+    // spike helpers above — a raw, unpaced pair loop straight at the queue-confined
+    // bridge, with the engine deliberately out of the picture. One ON-window per
+    // invocation, because the verdict on each is a HUMAN visual observation and
+    // those cannot be batched.
+    guard let c = makeController(args: args) else { exit(2) }
+    guard let onMsRaw = flagValue(args, "--on-ms"), let onMs = Double(onMsRaw), onMs.isFinite, onMs > 0 else {
+        fputs("usage: sublight-cli pair-sweep --on-ms <X> [--off-ms 400] [--seconds 4] [--fade <int>] [--floor f]\n", stderr)
+        exit(1)
+    }
+    let offMs = flagValue(args, "--off-ms").flatMap { Double($0) } ?? 400
+    guard offMs.isFinite, offMs >= 0 else {
+        fputs("error: --off-ms must be a finite number >= 0\n", stderr)
+        exit(1)
+    }
+    guard let sweepSecondsOpt = optionalSeconds(args) else {
+        fputs("error: --seconds must be a finite number > 0\n", stderr)
+        exit(1)
+    }
+    let sweepSeconds = sweepSecondsOpt ?? 4.0
+    var fadeSpeed: Int32?
+    if let raw = flagValue(args, "--fade") {
+        guard let v = Int32(raw) else {
+            fputs("error: --fade must be an integer (the fadeSpeed enum)\n", stderr)
+            exit(1)
+        }
+        if !c.bridge.supportsFadeControl {
+            fputs("error: setBrightness:fadeSpeed:commit: is absent on this build\n", stderr)
+            exit(2)
+        }
+        fadeSpeed = v
+    }
+
+    installRestoreOnSignal(c, level: max(c.floor, 0.2))
+    // Direct writes with no engine engagement: arm crash recovery by hand so a
+    // hard kill mid-sweep cannot leave the ALS suppressed with no marker.
+    c.armCrashRecovery()
+
+    let setter = fadeSpeed.map { "setBrightness:fadeSpeed:commit: fadeSpeed=\($0) commit=true" }
+        ?? "setBrightness:forKeyboard: (the setter the ENGINE uses — daemon default fade)"
+    print("=== pair-sweep (engine bypassed) ===")
+    print(String(format: "ON window %.1f ms at level %.4f, OFF gap %.1f ms, for %.1f s (~%.0f cycles)",
+                 onMs, c.floor, offMs, sweepSeconds, sweepSeconds / ((onMs + offMs) / 1000.0)))
+    print("setter: \(setter)")
+    print("⚠️  This blinks the keyboard backlight. WATCH THE KEYS — the verdict is visual.\n")
+
+    // Same suppression the engine asserts, so the ALS and the idle dimmer are
+    // not competing with the measurement.
+    let sweepCommander = BridgeCommander(bridge: c.bridge, keyboardID: c.keyboardID)
+    _ = sweepCommander.assertSuppression()
+    Thread.sleep(forTimeInterval: 0.3)
+    EngineQueue.run { EngineDiagnostics.shared.reset() }
+
+    func sweepSet(_ v: Float) -> UInt64 {
+        let t = DispatchTime.now().uptimeNanoseconds
+        if let f = fadeSpeed {
+            c.bridge.setBrightness(v, fadeSpeed: f, commit: true, c.keyboardID)
+        } else {
+            c.bridge.setBrightness(v, c.keyboardID)
+        }
+        return t
+    }
+
+    let onNanos = UInt64(onMs * 1e6)
+    let sweepEnd = Date().addingTimeInterval(sweepSeconds)
+    var spacings: [Double] = []
+    var cycles = 0
+    print(marker("STEP START", extra: String(format: "on_ms=%.1f fade=%@", onMs, fadeSpeed.map(String.init) ?? "default")))
+    while Date() < sweepEnd {
+        let tOn = sweepSet(c.floor)
+        spinWait(onNanos)
+        let tOff = sweepSet(0)
+        spacings.append(Double(tOff &- tOn) / 1e6)
+        cycles += 1
+        if offMs > 0 { Thread.sleep(forTimeInterval: offMs / 1000.0) }
+    }
+    print(marker("STEP STOP", extra: String(format: "cycles=%d", cycles)))
+
+    let snap = EngineDiagnostics.shared.snapshot()
+    let sorted = spacings.sorted()
+    if !sorted.isEmpty {
+        print(String(format: "\n  achieved ON->OFF command spacing: min %.3f  p50 %.3f  max %.3f ms  (requested %.1f ms, n=%d)",
+                     sorted.first!, sorted[sorted.count / 2], sorted.last!, onMs, sorted.count))
+    }
+    print(snap.report())
+    let sweepLabel = String(format: "pair-sweep on=%.1fms off=%.1fms fade=%@",
+                            onMs, offMs, fadeSpeed.map(String.init) ?? "default")
+    if DiagnosticsStore.save(DiagnosticsRecord(label: sweepLabel, counters: snap)) {
+        print("saved: \(DiagnosticsStore.defaultURL.path)")
+    }
+    c.panicRestore(to: 0.3)
+    print("\nrestored: auto-brightness on, level 0.30")
+    exit(0)
 
 case "pulse":
     let modeArg = args.count > 1 ? args[1] : ""

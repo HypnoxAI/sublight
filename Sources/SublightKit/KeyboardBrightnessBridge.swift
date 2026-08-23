@@ -22,6 +22,15 @@
 //       sees one caller at a time, in order: a calibration write, a CLI probe
 //       write, and a dither edge can never interleave. Callers keep their
 //       call sites unchanged and inherit this.
+//    5. COMMAND TRUTH. Every backlight-MUTATING call goes through
+//       `timedMutation`, which times the round trip, emits an `XPC` signpost
+//       interval around it, logs the request and the daemon's answer at debug
+//       level in category "engine", and feeds EngineDiagnostics. This is the
+//       only place in the process where a command actually leaves us, so it is
+//       the only honest place to measure one. Read it back with:
+//
+//         log stream --level debug --predicate \
+//           'subsystem == "com.hypnox.sublight" AND category == "engine"'
 //
 //  Licensed under the Apache License 2.0 — see LICENSE.
 //
@@ -29,6 +38,7 @@
 import Foundation
 import ObjectiveC
 import Darwin
+import os
 
 /// Selectors we expect `KeyboardBrightnessClient` to implement.
 ///
@@ -140,6 +150,52 @@ public final class KeyboardBrightnessBridge {
 
     private var dyn: AnyObject { client as AnyObject }
 
+    // MARK: - Command truth
+
+    private static let signposter = OSSignposter(subsystem: Log.subsystem, category: "engine")
+
+    /// Time, signpost, log and count ONE backlight-mutating daemon call.
+    ///
+    /// The measured span is the synchronous dynamic dispatch itself — the whole
+    /// hop into CoreBrightness and back — which is what the engine's edge
+    /// handler actually pays for and what a stalled daemon shows up in. The log
+    /// line carries the monotonic timestamp of the call, what was requested,
+    /// whether the daemon accepted it, and the round trip in ms.
+    ///
+    /// The formatting all happens inside os.Logger autoclosures, so when debug
+    /// logging is off the cost is a lock, a subtraction and two counters.
+    @discardableResult
+    private func timedMutation(_ kind: String,
+                               value: Float? = nil,
+                               fadeSpeed: Int32? = nil,
+                               commit: Bool? = nil,
+                               flag: Bool? = nil,
+                               seconds: Double? = nil,
+                               _ keyboardID: UInt64,
+                               _ body: () -> Bool) -> Bool {
+        let state = Self.signposter.beginInterval("XPC", id: Self.signposter.makeSignpostID())
+        let t0 = DispatchTime.now().uptimeNanoseconds
+        let ok = body()
+        let t1 = DispatchTime.now().uptimeNanoseconds
+        Self.signposter.endInterval("XPC", state)
+
+        let ms = Double(t1 &- t0) / 1e6
+        EngineDiagnostics.shared.noteCommand(kind: kind, latencyMs: ms)
+        Log.engine.debug("""
+            cmd \(kind, privacy: .public) \
+            t=\(Double(t0) / 1e6, format: .fixed(precision: 3), privacy: .public)ms \
+            value=\(value.map { String(format: "%.4f", $0) } ?? "-", privacy: .public) \
+            fade=\(fadeSpeed.map { String($0) } ?? "default", privacy: .public) \
+            commit=\(commit.map { String($0) } ?? "-", privacy: .public) \
+            flag=\(flag.map { String($0) } ?? "-", privacy: .public) \
+            seconds=\(seconds.map { String(format: "%.3f", $0) } ?? "-", privacy: .public) \
+            kbd=\(keyboardID, privacy: .public) \
+            ok=\(ok, privacy: .public) \
+            rt=\(ms, format: .fixed(precision: 3), privacy: .public)ms
+            """)
+        return ok
+    }
+
     // MARK: - Keyboard enumeration
 
     /// All keyboard backlight IDs known to the system.
@@ -200,7 +256,9 @@ public final class KeyboardBrightnessBridge {
     public func setBrightness(_ value: Float, _ keyboardID: UInt64) -> Bool {
         EngineQueue.run {
             guard responds("setBrightness:forKeyboard:") else { return false }
-            return dyn.setBrightness?(value, forKeyboard: keyboardID) ?? false
+            return timedMutation("brightness", value: value, keyboardID) {
+                dyn.setBrightness?(value, forKeyboard: keyboardID) ?? false
+            }
         }
     }
 
@@ -215,7 +273,10 @@ public final class KeyboardBrightnessBridge {
     public func setBrightness(_ value: Float, fadeSpeed: Int32, commit: Bool, _ keyboardID: UInt64) -> Bool {
         EngineQueue.run {
             guard responds("setBrightness:fadeSpeed:commit:forKeyboard:") else { return false }
-            return dyn.setBrightness?(value, fadeSpeed: fadeSpeed, commit: commit, forKeyboard: keyboardID) ?? false
+            return timedMutation("brightness-fade", value: value, fadeSpeed: fadeSpeed,
+                                 commit: commit, keyboardID) {
+                dyn.setBrightness?(value, fadeSpeed: fadeSpeed, commit: commit, forKeyboard: keyboardID) ?? false
+            }
         }
     }
 
@@ -255,7 +316,9 @@ public final class KeyboardBrightnessBridge {
     public func setAutoBrightness(_ enabled: Bool, _ keyboardID: UInt64) -> Bool {
         EngineQueue.run {
             guard responds("enableAutoBrightness:forKeyboard:") else { return false }
-            return dyn.enableAutoBrightness?(enabled, forKeyboard: keyboardID) ?? false
+            return timedMutation("auto-brightness", flag: enabled, keyboardID) {
+                dyn.enableAutoBrightness?(enabled, forKeyboard: keyboardID) ?? false
+            }
         }
     }
 
@@ -272,7 +335,9 @@ public final class KeyboardBrightnessBridge {
     public func setIdleDimTime(_ seconds: Double, _ keyboardID: UInt64) -> Bool {
         EngineQueue.run {
             guard responds("setIdleDimTime:forKeyboard:") else { return false }
-            return dyn.setIdleDimTime?(seconds, forKeyboard: keyboardID) ?? false
+            return timedMutation("idle-dim-time", seconds: seconds, keyboardID) {
+                dyn.setIdleDimTime?(seconds, forKeyboard: keyboardID) ?? false
+            }
         }
     }
 
@@ -315,7 +380,9 @@ public final class KeyboardBrightnessBridge {
     public func setIdleDimmingSuspended(_ suspend: Bool, _ keyboardID: UInt64) -> Bool {
         EngineQueue.run {
             guard responds("suspendIdleDimming:forKeyboard:") else { return false }
-            return dyn.suspendIdleDimming?(suspend, forKeyboard: keyboardID) ?? false
+            return timedMutation("idle-dim-suspend", flag: suspend, keyboardID) {
+                dyn.suspendIdleDimming?(suspend, forKeyboard: keyboardID) ?? false
+            }
         }
     }
 

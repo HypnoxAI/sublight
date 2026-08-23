@@ -46,6 +46,9 @@ final class DitherEngineTests: XCTestCase {
     private var flag: DirtyFlag!
     private var recorder: RecordingCommander!
     private var engine: DitherEngine!
+    /// Private tally per test: the engine defaults to the process-wide one,
+    /// which every other test in the run would otherwise pollute.
+    private var diag: EngineDiagnostics!
 
     private var suiteName: String!
     private var defaults: UserDefaults!
@@ -57,7 +60,8 @@ final class DitherEngineTests: XCTestCase {
         defaults = UserDefaults(suiteName: suiteName)!
         flag = DirtyFlag(directory: tempDir, defaults: defaults)
         recorder = RecordingCommander()
-        engine = DitherEngine(commander: recorder, highLevel: 0.0625, dirtyFlag: flag)
+        diag = EngineDiagnostics()
+        engine = DitherEngine(commander: recorder, highLevel: 0.0625, dirtyFlag: flag, diagnostics: diag)
     }
 
     override func tearDown() {
@@ -227,6 +231,64 @@ final class DitherEngineTests: XCTestCase {
         XCTAssertEqual(recorder.commands.filter { $0 == .assertSuppression }.count, asserts,
                        "a second start while running is a retune, not a re-engagement")
         XCTAssertEqual(engine.state, .running(frequencyHz: 20, duty: 0.3))
+    }
+
+    // MARK: Command-truth counters
+
+    func testCountersAccountForEveryEdgeAndMatchTheRecordedCommands() {
+        engine.start(frequencyHz: 20, duty: 0.5)
+        wait(0.5)
+        engine.stopAndRestore(ramp: 0)
+        wait(0.15)
+
+        let c = engine.counters
+        let ons = sets().filter { $0 > 0 }.count
+        let offs = sets().filter { $0 == 0 }.count
+
+        XCTAssertEqual(Int(c.high.executed), ons, "executed HIGH must equal the ON commands the seam saw")
+        XCTAssertEqual(Int(c.low.executed), offs, "executed LOW must equal the OFF commands the seam saw")
+        XCTAssertEqual(c.high.executed + c.high.skipped, c.high.fired,
+                       "with no ramp, every fired HIGH either commanded or was skipped")
+        XCTAssertGreaterThanOrEqual(c.high.scheduled, c.high.fired,
+                                    "a deadline can be coalesced away but never fire twice")
+        XCTAssertEqual(c.nominalPeriodMs, 50, accuracy: 0.001)
+        XCTAssertEqual(c.nominalOnWindowMs, 25, accuracy: 0.001)
+        XCTAssertGreaterThan(c.high.executed, 5)
+    }
+
+    func testResetCountersZeroesTheTally() {
+        engine.start(frequencyHz: 20, duty: 0.5)
+        wait(0.2)
+        XCTAssertGreaterThan(engine.counters.high.executed, 0)
+        engine.resetCounters()
+        XCTAssertEqual(engine.counters.high.executed, 0)
+        XCTAssertEqual(engine.counters.high.scheduled, 0)
+        engine.restoreNow()
+    }
+
+    func testAStalledQueueProducesErrDarkSkipsAndTheyAreCounted() {
+        // The err-dark rule drops any HIGH edge that runs later than its own ON
+        // window (duty x period = 7.5 ms here). Block the engine queue for well
+        // over a period and the next HIGH edge must be skipped, not commanded —
+        // this is the mechanism that turns a queue stall into a DARK cycle, so
+        // it has to be observable in the counters.
+        engine.start(frequencyHz: 20, duty: 0.15)
+        wait(0.2)
+        for _ in 0..<3 {
+            engine.queue.async { Thread.sleep(forTimeInterval: 0.06) }
+            wait(0.12)
+        }
+        wait(0.1)
+        let c = engine.counters
+        engine.restoreNow()
+
+        XCTAssertGreaterThan(c.high.skipped, 0, "a stall longer than the ON window must skip a HIGH edge")
+        XCTAssertGreaterThan(c.skipMaxLatenessMs, c.nominalOnWindowMs,
+                             "a skip is by definition later than its threshold")
+        XCTAssertEqual(c.skipLastThresholdMs, 7.5, accuracy: 0.5, "the threshold IS the ON window")
+        XCTAssertGreaterThanOrEqual(c.skipMaxRunLength, 1)
+        XCTAssertGreaterThan(c.longestExecutedHighGapMs, c.nominalPeriodMs,
+                             "skipped cycles stretch the gap between executed ON commands")
     }
 
     func testStateChangeIsDeliveredOnMain() {

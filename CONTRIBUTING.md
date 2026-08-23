@@ -38,8 +38,7 @@ Certificate of Origin 1.1, reproduced below.
 
 Everything the engine does is in the unified log under the app's bundle
 identifier — start/stop/restore, the dirty flag, suspend/resume, the launch
-probe (category `probe`), and one signpost per dither edge (`ON` / `OFF`,
-category `engine`):
+probe (category `probe`), and signposts per dither edge (category `engine`):
 
 ```bash
 log stream --predicate 'subsystem == "com.hypnox.sublight"' --info
@@ -48,6 +47,43 @@ log show --signpost --predicate 'subsystem == "com.hypnox.sublight" AND category
 
 The signpost timestamps are how timing regressions are measured: ON-to-ON
 spacing is the period, OFF offset from its ON edge is the duty.
+
+### Command truth
+
+A scheduled edge, an edge whose handler actually ran, and a command that
+actually reached the daemon are three different things, and conflating them is
+how a timing bug hides. The signposts keep them apart:
+
+| signpost              | meaning                                              |
+| --------------------- | ---------------------------------------------------- |
+| `EDGE_HIGH`/`EDGE_LOW`| the edge timer's handler ran                          |
+| `ON` / `OFF`          | a `setBrightness` command was issued to the daemon    |
+| `SKIP_HIGH`           | the edge ran and the err-dark rule refused to command |
+| `XPC` (interval)      | one daemon call, begin to return — its round trip     |
+
+Per-command detail — monotonic timestamp, requested value, `fadeSpeed`,
+`commit`, whether the daemon accepted it, and the round-trip latency — is
+logged at **debug** level, which the unified log does not persist by default:
+
+```bash
+log stream --level debug --predicate \
+  'subsystem == "com.hypnox.sublight" AND category == "engine"'
+```
+
+The same facts are summed into counters (`scheduled` / `fired` / `executed` /
+`skipped` per edge, plus latency percentiles, the longest gap between executed
+ON commands, and the longest run of consecutive err-dark skips). Read them with:
+
+```bash
+sublight-cli status                       # this process, plus the last recorded run
+sublight-cli hold 0.009375 --period 0.111111111 --seconds 30   # engine path, timed
+sublight-cli pair-sweep --on-ms 16        # raw ON/OFF pairs, engine bypassed
+```
+
+`scheduled - fired` is the number of deadlines a repeating `DispatchSourceTimer`
+coalesced away while its queue was blocked; `fired - executed` is what engine
+policy declined to send. Both read as darkness on the keys and neither is
+visible from the LED alone.
 
 ## Scope reminders
 

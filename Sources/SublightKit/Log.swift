@@ -17,6 +17,15 @@
 //      log stream --predicate 'subsystem == "com.hypnox.sublight"' --info
 //      log show --signpost --predicate 'subsystem == "com.hypnox.sublight" AND category == "engine"' --last 2m
 //
+//  Per-command detail — every backlight mutation with its monotonic timestamp,
+//  requested value, fadeSpeed, and round-trip latency, plus every err-dark edge
+//  skip with its lateness and threshold — is at DEBUG level, which the unified
+//  log does not persist by default. Stream it:
+//
+//      log stream --level debug --predicate 'subsystem == "com.hypnox.sublight" AND category == "engine"'
+//
+//  The summed form is `sublight-cli status` (see EngineCounters.swift).
+//
 //  Nothing here is ever sent anywhere — the unified log is local to the
 //  machine, and Sublight makes no network calls at all.
 //

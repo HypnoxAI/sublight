@@ -43,6 +43,22 @@
 //  never by merely cancelling a timer. The dirty flag brackets the engagement
 //  so a crash in between self-heals on the next launch.
 //
+//  ERR-DARK, AND WHY IT IS COUNTED. `highEdge` refuses to command ON when this
+//  cycle's OFF deadline has already passed — see the comment at the check. The
+//  threshold is not a constant: it IS the ON window, duty × period, so it
+//  shrinks as the slider goes down (16.7 ms at 9 Hz / duty 0.15). A skip makes
+//  a whole cycle dark, and consecutive skips make a dark ENVELOPE. Every skip
+//  is therefore counted, timed against its own threshold, and its run length
+//  tracked, so "the light went out for half a second" can be attributed to
+//  engine policy or ruled out (EngineCounters).
+//
+//  SIGNPOSTS distinguish the three things that are easy to conflate:
+//      EDGE_HIGH / EDGE_LOW   the timer handler ran (a scheduled edge)
+//      ON / OFF               a command was issued to the daemon
+//      SKIP_HIGH              the edge ran and was deliberately not commanded
+//  The bridge adds an XPC interval around the command itself, so edge-to-
+//  command and command duration are separable in one Instruments trace.
+//
 //  Licensed under the Apache License 2.0 — see LICENSE.
 //
 
@@ -71,6 +87,9 @@ public final class DitherEngine {
 
     private let commander: BacklightCommanding
     private let dirtyFlag: DirtyFlag
+    /// Command-truth tally. Process-wide in production (the bridge feeds the
+    /// same one with command latencies); tests inject their own.
+    private let diag: EngineDiagnostics
     private static let signposter = OSSignposter(subsystem: Log.subsystem, category: "engine")
 
     // MARK: State — every field below is confined to `queue`.
@@ -112,10 +131,16 @@ public final class DitherEngine {
     ///   - commander: the hardware seam (BridgeCommander in production).
     ///   - highLevel: the system floor — the HIGH target of the dither.
     ///   - dirtyFlag: crash marker; tests inject one in a temp directory.
-    public init(commander: BacklightCommanding, highLevel: Float, dirtyFlag: DirtyFlag = DirtyFlag()) {
+    ///   - diagnostics: command-truth tally; defaults to the process-wide one
+    ///     the bridge also feeds, so engine edges and daemon latencies land in
+    ///     a single report.
+    public init(commander: BacklightCommanding, highLevel: Float,
+                dirtyFlag: DirtyFlag = DirtyFlag(),
+                diagnostics: EngineDiagnostics = .shared) {
         self.commander = commander
         self._highLevel = highLevel
         self.dirtyFlag = dirtyFlag
+        self.diag = diagnostics
     }
 
     deinit {
@@ -140,6 +165,14 @@ public final class DitherEngine {
 
     public var state: EngineState { EngineQueue.run { _state } }
     public var isRunning: Bool { state.isRunning }
+
+    /// Scheduled / fired / executed / skipped edge counts and daemon command
+    /// latency for this process. Safe from any thread. Exposed by
+    /// `sublight-cli status`, `hold` and `pair-sweep`.
+    public var counters: EngineCounters { diag.snapshot() }
+
+    /// Zero the tally — used to bracket one measurement run.
+    public func resetCounters() { diag.reset() }
 
     // MARK: API (any thread; all hop to the queue)
 
@@ -321,6 +354,7 @@ public final class DitherEngine {
         cycle = 0
         lowFiredInCycle = nil
 
+        diag.noteAnchorReset(periodNanos: s.periodNanos, onWindowNanos: s.lowOffsetNanos)
         let period = DispatchTimeInterval.nanoseconds(Int(s.periodNanos))
 
         let high = DispatchSource.makeTimerSource(flags: .strict, queue: queue)
@@ -343,6 +377,8 @@ public final class DitherEngine {
         guard let s0 = schedule else { return }
         let now = DispatchTime.now().uptimeNanoseconds
         cycle = s0.cycle(at: now)
+        Self.signposter.emitEvent("EDGE_HIGH")
+        diag.noteHighEdge(cycle: cycle)
 
         // Ramps step here, BEFORE this edge's XPC: the duty for the upcoming
         // LOW edge is fixed first, then the daemon is spoken to. The ramp step
@@ -372,13 +408,38 @@ public final class DitherEngine {
         // already commanded this cycle's OFF, a late HIGH would otherwise fall
         // through and relight the keys. Only a duty RAISE moves the deadline
         // back into the future, and that case correctly does not skip.
-        if s.lowDeadline(cycle: cycle) <= now { return }
+        if s.lowDeadline(cycle: cycle) <= now {
+            let due = s.highDeadline(cycle: cycle)
+            let latenessMs = Double(now > due ? now - due : 0) / 1e6
+            let thresholdMs = Double(s.lowOffsetNanos) / 1e6
+            Self.signposter.emitEvent("SKIP_HIGH")
+            diag.noteHighSkipped(latenessMs: latenessMs, thresholdMs: thresholdMs)
+            Log.engine.debug("""
+                edge HIGH cycle \(self.cycle, privacy: .public) SKIPPED (err-dark) \
+                t=\(Double(now) / 1e6, format: .fixed(precision: 3), privacy: .public)ms \
+                late=\(latenessMs, format: .fixed(precision: 3), privacy: .public)ms \
+                threshold=\(thresholdMs, format: .fixed(precision: 3), privacy: .public)ms (= ON window, duty x period)
+                """)
+            return
+        }
 
+        let issuedAt = DispatchTime.now().uptimeNanoseconds
+        let due = s.highDeadline(cycle: cycle)
+        Log.engine.debug("""
+            edge HIGH cycle \(self.cycle, privacy: .public) EXECUTE \
+            t=\(Double(issuedAt) / 1e6, format: .fixed(precision: 3), privacy: .public)ms \
+            late=\(Double(issuedAt > due ? issuedAt - due : 0) / 1e6, format: .fixed(precision: 3), privacy: .public)ms \
+            value=\(self._highLevel, format: .fixed(precision: 4), privacy: .public)
+            """)
         Self.signposter.emitEvent("ON")
+        diag.noteHighExecuted(atNanos: issuedAt)
         commander.setBrightness(_highLevel)
     }
 
-    private func lowEdge() {
+    /// - Parameter immediate: true when called by `applyDuty` for an OFF edge
+    ///   whose deadline the duty change moved into the past. That is an
+    ///   executed command but NOT a timer fire, so it is not counted as one.
+    private func lowEdge(immediate: Bool = false) {
         guard let s = schedule else { return }
         // Attribute this OFF to the cycle it was SCHEDULED for, not the cycle
         // the wall clock is in now. A late handler (queue stalled past the next
@@ -387,8 +448,22 @@ public final class DitherEngine {
         // cycle. Subtracting the low offset lands back in the scheduled cycle.
         let now = DispatchTime.now().uptimeNanoseconds
         let scheduledNow = now > s.lowOffsetNanos ? now - s.lowOffsetNanos : 0
-        lowFiredInCycle = s.cycle(at: scheduledNow)
+        let n = s.cycle(at: scheduledNow)
+        lowFiredInCycle = n
+        if !immediate {
+            Self.signposter.emitEvent("EDGE_LOW")
+            diag.noteLowEdge(cycle: n)
+        }
+        let issuedAt = DispatchTime.now().uptimeNanoseconds
+        let due = s.lowDeadline(cycle: n)
+        Log.engine.debug("""
+            edge LOW cycle \(n, privacy: .public) EXECUTE\(immediate ? " (immediate, duty change)" : "", privacy: .public) \
+            t=\(Double(issuedAt) / 1e6, format: .fixed(precision: 3), privacy: .public)ms \
+            late=\(Double(issuedAt > due ? issuedAt - due : 0) / 1e6, format: .fixed(precision: 3), privacy: .public)ms \
+            value=0.0000
+            """)
         Self.signposter.emitEvent("OFF")
+        diag.noteLowExecuted()
         commander.setBrightness(0)
     }
 
@@ -408,11 +483,20 @@ public final class DitherEngine {
         guard abs(d - s.duty) > 0.0005 else { return }
         s = s.withDuty(d)
         schedule = s
+        diag.noteOnWindow(nanos: s.lowOffsetNanos)
 
         let now = DispatchTime.now().uptimeNanoseconds
         let current = s.cycle(at: now)
-        if allowImmediateLow, lowFiredInCycle != current, s.lowDeadline(cycle: current) <= now {
-            lowEdge()
+        if lowFiredInCycle != current, s.lowDeadline(cycle: current) <= now {
+            if allowImmediateLow {
+                lowEdge(immediate: true)
+            } else {
+                // A ramp step lowered the duty past this cycle's OFF point.
+                // The rule says a ramp must not fire OFF here, so this cycle's
+                // OFF is genuinely dropped — counted, not silent.
+                diag.noteLowSkipped()
+                Log.engine.debug("edge LOW cycle \(current, privacy: .public) DROPPED (ramp step moved the OFF deadline into the past)")
+            }
         }
         let next = s.nextLowDeadline(after: now, lowAlreadyFiredIn: lowFiredInCycle)
         low.schedule(deadline: DispatchTime(uptimeNanoseconds: next),

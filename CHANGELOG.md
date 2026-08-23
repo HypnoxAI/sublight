@@ -11,6 +11,22 @@ stability on.
 ## [Unreleased]
 
 ### Added
+- **Command-truth instrumentation.** Every backlight-mutating daemon call is
+  now timed at the bridge seam and logged at debug level in category `engine`
+  with its monotonic timestamp, requested value, `fadeSpeed`, `commit`, the
+  daemon's answer, and the round-trip latency in ms; an `XPC` signpost interval
+  wraps each one. The engine counts each edge four ways — `scheduled`
+  (deadlines that came due), `fired` (handler runs; the difference is what a
+  repeating `DispatchSourceTimer` coalesced away), `executed` (commands issued)
+  and `skipped` (the err-dark rule declining to command) — and records the
+  lateness, threshold and *run length* of every skip, so a burst of skipped
+  cycles is distinguishable from scattered ones. New signposts `EDGE_HIGH`,
+  `EDGE_LOW` and `SKIP_HIGH` separate a scheduled edge from a command that was
+  actually sent; `ON`/`OFF` keep their meaning as issued commands.
+  `sublight-cli status` prints the counters and the last recorded run,
+  `hold --seconds n` runs the engine path for a fixed time and prints them,
+  and `pair-sweep --on-ms X` drives raw ON/OFF pairs straight at the bridge
+  with the engine bypassed. Diagnostics only — no engine behavior changed.
 - **VoiceOver support.** Accessibility labels, hints, and values across the
   popover, Settings, calibration, and onboarding: the menu-bar icon reports
   dimming/idle, sliders speak their value in hertz or percent, and the
