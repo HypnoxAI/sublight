@@ -121,6 +121,41 @@ public final class KeyboardBrightnessBridge {
     /// calls go through guarded dynamic dispatch).
     private let client: NSObject
 
+    private var _writePadding: Float?
+
+    /// DIAGNOSTIC ONLY, nil in production. When set, every `setBrightness(_:_:)`
+    /// sends TWO commands instead of one: first `value + writePadding` (clamped
+    /// to [0, 1]), then `value`.
+    ///
+    /// This exists to break one degeneracy and nothing else. The engine emits
+    /// exactly two writes per dither cycle, so its command RATE and its cycle
+    /// PERIOD are rigidly reciprocal and no run can tell which one the daemon is
+    /// reacting to. Padding doubles the rate at a fixed period. The two writes
+    /// must carry DIFFERENT values, or a daemon that ignores a repeat of the
+    /// value it already holds would swallow the second one and the rate would
+    /// not actually double. The offset is small enough to stay inside the same
+    /// 1/16 output step, so the LED is asked for the same thing twice over.
+    ///
+    /// ORDER MATTERS, and this is a deliberate departure from the obvious
+    /// reading of "send it twice": the PADDED value goes first and the intended
+    /// value second. At a LOW edge the intended value is 0 and the padded one is
+    /// sub-floor. macOS clamping sub-floor commands UP to the floor is this
+    /// whole project's founding premise, so intended-then-padded would leave
+    /// every OFF edge parked on a possibly-lit value for the entire OFF window
+    /// and silently destroy the very thing being measured. Padded-first leaves
+    /// it in force for one round trip (~0.15 ms), which is optically nothing,
+    /// and the edge still settles on the value the engine asked for.
+    public var writePadding: Float? {
+        get { EngineQueue.run { _writePadding } }
+        set { EngineQueue.run { _writePadding = newValue } }
+    }
+
+    /// The padded companion of `value`, clamped to [0, 1]. Pure, so the
+    /// arithmetic is testable without a keyboard.
+    public static func paddedValue(_ value: Float, pad: Float) -> Float {
+        min(max(value + pad, 0), 1)
+    }
+
     // MARK: - Init
 
     public init() throws {
@@ -266,6 +301,14 @@ public final class KeyboardBrightnessBridge {
     public func setBrightness(_ value: Float, _ keyboardID: UInt64) -> Bool {
         EngineQueue.run {
             guard responds("setBrightness:forKeyboard:") else { return false }
+            if let pad = _writePadding {
+                let padded = Self.paddedValue(value, pad: pad)
+                if padded != value {
+                    timedMutation("brightness-pad", value: padded, keyboardID) {
+                        dyn.setBrightness?(padded, forKeyboard: keyboardID) ?? false
+                    }
+                }
+            }
             return timedMutation("brightness", value: value, keyboardID) {
                 dyn.setBrightness?(value, forKeyboard: keyboardID) ?? false
             }

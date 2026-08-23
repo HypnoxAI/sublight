@@ -64,6 +64,13 @@ func printUsage() {
                           backlightLevelForKeyboard:) at h Hz on the engine queue
                           during the run, timestamped against the last commanded level.
       --sample-csv <path> Where to write those samples (default: beside diagnostics.json)
+      --pad-writes        DIAGNOSTIC: send every edge command TWICE — first the value
+                          offset by --pad-offset, then the value itself — doubling the
+                          command rate at an unchanged period. Breaks the writes/s vs
+                          cycle-period degeneracy. Padded value goes FIRST so an OFF
+                          edge never parks on a sub-floor value.
+      --pad-offset <f>    Padding offset (default 0.002; small enough to stay inside
+                          the same 1/16 output step)
 
     PAIR-SWEEP OPTIONS (diagnostic; bypasses the engine):
       --on-ms <X>     ON window in milliseconds         (required)
@@ -153,6 +160,14 @@ func optionalFreq(_ args: [String]) -> Double?? {
     guard let v = Double(raw), v.isFinite, v > 0 else { return nil }
     return .some(v)
 }
+/// nil = present but invalid; .some(nil) = absent; .some(.some) = a finite value.
+func optionalPadOffset(_ args: [String]) -> Float?? {
+    guard args.contains("--pad-writes") else { return .some(nil) }
+    guard let raw = flagValue(args, "--pad-offset") else { return .some(0.002) }
+    guard let v = Float(raw), v.isFinite, v > 0, v < 1 else { return nil }
+    return .some(v)
+}
+
 /// nil = present but invalid; .some(nil) = absent; .some(.some) = a finite value.
 func optionalSampleHz(_ args: [String]) -> Double?? {
     guard let raw = flagValue(args, "--sample-hz") else { return .some(nil) }
@@ -799,6 +814,10 @@ case "hold":
         fputs("error: --sample-hz must be a finite number in (0, 200]\n", stderr)
         exit(1)
     }
+    guard let padOffset = optionalPadOffset(args) else {
+        fputs("error: --pad-offset must be a finite number in (0, 1)\n", stderr)
+        exit(1)
+    }
     // --duty is pure CLI sugar for the level that produces that duty; the engine
     // is driven through exactly the same setLevel path either way.
     let value = dutyFlag.map { Float($0) * c.floor } ?? levelArg!
@@ -812,6 +831,12 @@ case "hold":
     if seconds == nil { print("Ctrl-C restores auto-brightness and lands at the floor.\n") }
 
     installRestoreOnSignal(c, level: max(c.floor, 0.2))
+
+    if let padOffset {
+        c.bridge.writePadding = padOffset
+        print(String(format: "write padding: ON (+%.4f, padded value sent first) — every edge is TWO commands",
+                     padOffset))
+    }
 
     // Bracket the measurement: zero the tally on the engine queue, so it is
     // ordered strictly before the start block setLevel is about to enqueue.

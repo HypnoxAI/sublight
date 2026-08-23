@@ -11,6 +11,14 @@ stability on.
 ## [Unreleased]
 
 ### Added
+- **Write padding** (`hold --pad-writes [--pad-offset f]`), a diagnostic that
+  sends every edge command twice — first the value offset by ~0.002, then the
+  value itself — doubling the command rate at an unchanged cycle period. The
+  engine emits exactly two writes per cycle, so its rate and its period are
+  rigidly reciprocal and no ordinary run can tell which one the daemon reacts
+  to; this breaks that tie. The padded value goes FIRST so an OFF edge never
+  parks on a sub-floor value for the whole OFF window. CLI and bridge
+  instrumentation only, off by default — no engine behavior changed.
 - **Discrimination runs and a read-back sampler.** `hold` gains `--freq`,
   `--duty` (drive the engine at an exact duty instead of deriving it from a
   level), `--sample-hz` and `--sample-csv`. The sampler polls BOTH read-backs on

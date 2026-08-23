@@ -158,3 +158,25 @@ final class EngineCountersTests: XCTestCase {
         XCTAssertEqual(back, record)
     }
 }
+
+final class WritePaddingTests: XCTestCase {
+
+    func testPaddedValueStaysInsideTheSameSixteenthStepAndIsDistinct() {
+        let floor: Float = 0.0625
+        let pad: Float = 0.002
+        let up = KeyboardBrightnessBridge.paddedValue(floor, pad: pad)
+        XCTAssertNotEqual(up, floor, "a padded write must differ, or a dedupe swallows it")
+        XCTAssertGreaterThanOrEqual(up, floor)
+        XCTAssertLessThan(up, floor + 0.0625, "must not cross into the next 1/16 step")
+
+        let off = KeyboardBrightnessBridge.paddedValue(0, pad: pad)
+        XCTAssertNotEqual(off, 0)
+        XCTAssertLessThan(off, 0.0625, "the OFF pad must stay inside the bottom step")
+    }
+
+    func testPaddedValueClampsToUnitRangeAndCannotTrap() {
+        XCTAssertEqual(KeyboardBrightnessBridge.paddedValue(1.0, pad: 0.002), 1.0)
+        XCTAssertEqual(KeyboardBrightnessBridge.paddedValue(0.999, pad: 0.5), 1.0)
+        XCTAssertEqual(KeyboardBrightnessBridge.paddedValue(0, pad: 0), 0)
+    }
+}

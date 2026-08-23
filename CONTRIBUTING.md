@@ -79,6 +79,7 @@ sublight-cli status                       # this process, plus the last recorded
 sublight-cli hold --freq 9 --duty 0.15 --seconds 30            # engine path, timed
 sublight-cli hold --freq 9 --duty 0.15 --seconds 30 --sample-hz 20   # + read-back poll
 sublight-cli pair-sweep --on-ms 16        # raw ON/OFF pairs, engine bypassed
+sublight-cli hold --freq 6 --duty 0.15 --seconds 30 --pad-writes   # 2x write rate, same period
 ```
 
 Neither read-back is an output oracle — see the measured notes on
