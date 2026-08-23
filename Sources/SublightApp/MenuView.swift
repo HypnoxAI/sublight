@@ -25,6 +25,10 @@ struct MenuView: View {
         VStack(alignment: .leading, spacing: 11) {
             header
 
+            if state.available, state.acknowledged, state.consentPending, !state.consentGranted {
+                deferredConsentNotice
+            }
+
             if !state.available {
                 unavailableView
             } else if !state.acknowledged {
@@ -35,6 +39,27 @@ struct MenuView: View {
         }
         .padding(13)
         .frame(width: 288)
+    }
+
+    // MARK: Deferred consent
+
+    /// A menu-bar app has no attention while it sits in the menu bar. Opening
+    /// the popover is the moment someone is actually looking, so that is where
+    /// a skipped scheduled dim gets reported — not in a log nobody reads, and
+    /// not in a modal fired at an empty chair.
+    private var deferredConsentNotice: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text("A scheduled dim was skipped - Sublight needs one-time consent.")
+                .font(.caption)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Review and enable") { state.reviewConsentAndEnable() }
+                .controlSize(.small)
+                .accessibilityHint("Shows the safety information and, if you accept, starts dimming.")
+        }
+        .padding(9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 6).fill(Color.orange.opacity(0.14)))
+        .accessibilityElement(children: .contain)
     }
 
     // MARK: Header

@@ -90,6 +90,54 @@ final class ConsentMarkerTests: XCTestCase {
         XCTAssertFalse(marker.isGranted)
     }
 
+    // MARK: Deferred consent (a scheduled dim skipped for lack of consent)
+
+    func testPendingStartsClearAndIsIndependentOfConsent() {
+        XCTAssertFalse(marker.isPending)
+        marker.setPending()
+        XCTAssertTrue(marker.isPending)
+        XCTAssertFalse(marker.isGranted, "a pending skip is not a grant")
+    }
+
+    func testPendingPersistsAndIsVisibleToAnotherInstance() {
+        marker.setPending()
+        XCTAssertTrue(ConsentMarker(directory: dir).isPending,
+                      "the popover may be opened by a later launch than the one that skipped")
+    }
+
+    func testSetPendingIsIdempotent() {
+        marker.setPending()
+        marker.setPending()
+        XCTAssertTrue(marker.isPending)
+        marker.clearPending()
+        XCTAssertFalse(marker.isPending)
+        marker.clearPending()   // must not throw on an already-absent flag
+        XCTAssertFalse(marker.isPending)
+    }
+
+    func testGrantingConsentAnswersThePendingQuestion() {
+        marker.setPending()
+        XCTAssertTrue(marker.record())
+        XCTAssertTrue(marker.isGranted)
+        XCTAssertFalse(marker.isPending, "consent resolves whatever was deferred")
+    }
+
+    func testClearingConsentAlsoClearsPending() {
+        marker.setPending()
+        marker.record()
+        marker.setPending()          // as if a later schedule fired post-reset
+        marker.clear()
+        XCTAssertFalse(marker.isGranted)
+        XCTAssertFalse(marker.isPending)
+    }
+
+    func testPendingSurvivesAnUnrelatedConsentRead() {
+        marker.setPending()
+        _ = marker.isGranted
+        _ = marker.recordedVersion
+        XCTAssertTrue(marker.isPending, "reading must not clear the flag")
+    }
+
     func testTheCurrentVersionIsOne() {
         XCTAssertEqual(ConsentMarker.currentVersion, 1,
                        "bump this deliberately, together with the alert copy")

@@ -81,6 +81,9 @@ final class AppState: ObservableObject {
     /// Mirror of the shared consent marker (see ConsentMarker). Nothing may
     /// command the backlight until this is true.
     @Published private(set) var consentGranted: Bool = false
+    /// A scheduled dim was skipped for lack of consent and nobody has been
+    /// told yet. Drives the popover's inline notice.
+    @Published private(set) var consentPending: Bool = false
     @Published var launchAtLogin: Bool = false { didSet { updateLoginItem() } }
     @Published var hotKey: HotKeyChoice = .off { didSet { applyHotKey() } }
     /// Set when a shortcut could not be claimed — almost always because
@@ -161,6 +164,7 @@ final class AppState: ObservableObject {
         advancedMode = defaults.bool(forKey: Keys.advanced)
         acknowledged = defaults.bool(forKey: Keys.ack)
         consentGranted = consent.isGranted
+        consentPending = consent.isPending
         launchAtLogin = (SMAppService.mainApp.status == .enabled)
         scheduleEnabled = defaults.bool(forKey: Keys.schedEnabled)
         if let m = defaults.object(forKey: Keys.schedStart) as? Int { scheduleStartMinutes = m }
@@ -365,9 +369,29 @@ final class AppState: ObservableObject {
             Log.lifecycle.notice("consent declined — dimming not enabled, nothing commanded")
             return false
         }
-        consent.record()
+        consent.record()            // also clears any pending flag
         consentGranted = consent.isGranted
+        consentPending = consent.isPending
         return consentGranted
+    }
+
+    /// The deferred path: the popover's "Review and enable". Raises the same
+    /// alert the direct toggle would, and — because the whole point is that a
+    /// scheduled dim was missed — engages immediately if that window is still
+    /// open rather than making the user wait for the next transition.
+    func reviewConsentAndEnable() {
+        guard requestConsentIfNeeded() else {
+            Log.lifecycle.notice("deferred consent: declined from the popover; pending flag kept")
+            return
+        }
+        guard scheduleEnabled, inScheduleWindow() else {
+            Log.lifecycle.notice("deferred consent: granted, but the schedule window is no longer active")
+            return
+        }
+        if advancedMode { frequencyHz = scheduleFrequency }
+        isEnabled = true
+        lastInWindow = true
+        Log.lifecycle.notice("deferred consent: granted and the schedule window is still active — engaging")
     }
 
     /// THE enable path. Every route that turns dimming on for a person present
@@ -684,6 +708,11 @@ final class AppState: ObservableObject {
         } else {
             stopScheduleTimer()
             lastInWindow = nil
+            // Removing the schedule retires the question it raised.
+            if consentPending {
+                consent.clearPending()
+                consentPending = false
+            }
         }
     }
 
@@ -706,19 +735,20 @@ final class AppState: ObservableObject {
         guard scheduleEnabled, acknowledged else { return }
         let now = inScheduleWindow()
         if force || now != lastInWindow {
-            if now {
-                // Deliberately NOT the consent alert: the schedule fires
-                // unattended, and a modal nobody is there to answer would
-                // block the app until they came back. Automation simply does
-                // not get to be the first thing that turns dimming on.
-                guard consentGranted else {
-                    Log.lifecycle.notice("schedule: window entered but consent has not been given — not enabling")
-                    lastInWindow = now
-                    return
-                }
+            // Deliberately NOT the consent alert: the schedule fires
+            // unattended, and a modal nobody is there to answer would block the
+            // app until they came back. Automation does not get to be the first
+            // thing that turns dimming on — but it does not get to fail
+            // silently either, so the skip is recorded and the popover asks.
+            switch DimmingPolicy.scheduleTransition(enteringWindow: now, consentGranted: consentGranted) {
+            case .engage:
                 if advancedMode { frequencyHz = scheduleFrequency }
                 isEnabled = true
-            } else {
+            case .deferForConsent:
+                consent.setPending()
+                consentPending = true
+                Log.lifecycle.notice("schedule: window entered without consent — skipped and deferred to the popover")
+            case .disengage:
                 isEnabled = false
             }
         }
@@ -890,8 +920,9 @@ final class AppState: ObservableObject {
         scheduleEndMinutes = 7 * 60
         scheduleFrequency = FrequencyPreset.high
         acknowledged = false
-        consent.clear()
+        consent.clear()             // clears the pending flag too
         consentGranted = false
+        consentPending = false
         clearCalibration()
         for key in [Keys.ack, Keys.brightness, Keys.freq, Keys.advanced, Keys.floor,
                     Keys.schedEnabled, Keys.schedStart, Keys.schedEnd, Keys.schedFreq] {

@@ -37,6 +37,9 @@ public struct ConsentMarker {
     /// agreed to an older version is asked again.
     public static let currentVersion = 1
     public static let fileName = "consent.json"
+    /// Set when an UNATTENDED enable (the schedule) was refused for lack of
+    /// consent. See `isPending`.
+    public static let pendingFileName = "consent-pending"
 
     public let fileURL: URL
 
@@ -48,6 +51,43 @@ public struct ConsentMarker {
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Sublight", isDirectory: true)
         self.fileURL = dir.appendingPathComponent(Self.fileName)
+    }
+
+    /// Where the deferred-consent flag lives, beside the consent marker.
+    public var pendingFileURL: URL {
+        fileURL.deletingLastPathComponent().appendingPathComponent(Self.pendingFileName)
+    }
+
+    /// True when a scheduled dim was skipped because consent had never been
+    /// given, and nobody has been told yet.
+    ///
+    /// The schedule fires unattended, so it must not raise a modal — but
+    /// declining to act and saying nothing leaves someone with a feature that
+    /// silently does not work. This flag is the bridge: it persists the fact
+    /// that something was skipped, so the next time the popover opens (the
+    /// attention moment for a menu-bar app) it can say so and offer the
+    /// prompt. It clears only when consent is granted or the schedule is
+    /// turned off — not on a whim, and not merely because time passed.
+    public var isPending: Bool {
+        FileManager.default.fileExists(atPath: pendingFileURL.path)
+    }
+
+    public func setPending() {
+        guard !isPending else { return }
+        do {
+            try FileManager.default.createDirectory(
+                at: pendingFileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("1\n".utf8).write(to: pendingFileURL, options: .atomic)
+            Log.lifecycle.notice("deferred consent: pending flag set")
+        } catch {
+            Log.lifecycle.error("could not set pending consent flag: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    public func clearPending() {
+        guard isPending else { return }
+        try? FileManager.default.removeItem(at: pendingFileURL)
+        Log.lifecycle.notice("deferred consent: pending flag cleared")
     }
 
     private struct Record: Codable {
@@ -89,6 +129,8 @@ public struct ConsentMarker {
             encoder.dateEncodingStrategy = .iso8601
             let data = try encoder.encode(Record(version: version, recordedAt: date))
             try data.write(to: fileURL, options: .atomic)
+            // Granting consent answers whatever was deferred.
+            clearPending()
             Log.lifecycle.notice("consent v\(version, privacy: .public) recorded")
             return true
         } catch {
@@ -100,6 +142,7 @@ public struct ConsentMarker {
     /// Forget consent — the app's "reset to defaults", and the way to re-test
     /// the first-enable flow.
     public func clear() {
+        clearPending()
         guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
         try? FileManager.default.removeItem(at: fileURL)
         Log.lifecycle.notice("consent marker cleared")

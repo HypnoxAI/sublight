@@ -35,6 +35,25 @@ public enum FrequencyPreset {
 
 public enum DimmingPolicy {
 
+    /// What a schedule window transition should do.
+    public enum ScheduleAction: Equatable {
+        /// Turn dimming on.
+        case engage
+        /// The window opened but consent has never been given. Do NOT command
+        /// the backlight and do NOT raise a modal — the schedule fires
+        /// unattended. Record that it was skipped so the popover can say so.
+        case deferForConsent
+        /// The window closed.
+        case disengage
+    }
+
+    /// Pure so the "automation must never be the first thing that dims" rule
+    /// is a tested fact rather than a comment in a view controller.
+    public static func scheduleTransition(enteringWindow: Bool, consentGranted: Bool) -> ScheduleAction {
+        guard enteringWindow else { return .disengage }
+        return consentGranted ? .engage : .deferForConsent
+    }
+
     public static func effectiveRunning(userEnabled: Bool, systemSuspended: Bool) -> Bool {
         userEnabled && !systemSuspended
     }
