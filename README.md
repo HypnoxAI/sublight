@@ -14,17 +14,27 @@ Free and open source · Apache 2.0 · zero dependencies · zero network calls
 
 ---
 
-macOS clamps the keyboard backlight to a lowest step that is still too bright in
-a genuinely dark room. Sublight goes *below* it.
+**Sublight** dims your MacBook's keyboard backlight below the minimum macOS
+allows.
 
-It cannot do that with a static setting — the hardware refuses — so it switches
-the backlight on and off a few times a second, and the average comes out below
-the floor. **This is visible flicker, at every setting.** macOS will not honour
-a dither cycle short enough to fuse, so a steady glow is not on the menu; the
-fastest, dimmest, steadiest mode is 8 Hz and you can still see it pulsing.
-That is measured, not estimated — see [`SAFETY.md`](SAFETY.md) before you
-install, and [`docs/COREBRIGHTNESS.md`](docs/COREBRIGHTNESS.md) for the
-evidence.
+It works by pulsing: the backlight switches fully on and off a few times per
+second (presets at 3, 6, and 8 Hz), so the keys spend most of each cycle dark
+and the average glow drops beneath the system floor. The pulse is visible in
+every mode - a slow blink at 3 Hz, a fast flicker at 8. That flicker is not a
+defect: it is the mechanism, and the measured price of sub-floor dimming. The
+backlight daemon will not sustain a cycle above 8 Hz (measured, enforced as a
+hard ceiling), and flicker fusion needs more than that - so Sublight tells you
+the truth instead of promising a steady glow it cannot produce.
+
+**Before you enable it:** flashing light in the 3-30 Hz range can trigger
+seizures in people with photosensitive epilepsy. Read [SAFETY.md](SAFETY.md)
+first, and do not use Sublight if you - or anyone who can see your keyboard - is
+sensitive to flicker. The app asks for explicit consent the first time you
+enable dimming.
+
+Every claim above is a measurement, not an assumption - the boundary tables, the
+daemon's cycle-period limit, and the read-back APIs that lie are documented in
+[docs/COREBRIGHTNESS.md](docs/COREBRIGHTNESS.md).
 
 <!-- SCREENSHOTS: replace these placeholders before publishing.
      1. menu bar + popover in Simple mode
