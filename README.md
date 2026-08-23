@@ -20,19 +20,19 @@ allows.
 It works by pulsing: the backlight switches fully on and off a few times per
 second (presets at 3, 6, and 8 Hz), so the keys spend most of each cycle dark
 and the average glow drops beneath the system floor. The pulse is visible in
-every mode - a slow blink at 3 Hz, a fast flicker at 8. That flicker is not a
+every mode — a slow blink at 3 Hz, a fast flicker at 8. That flicker is not a
 defect: it is the mechanism, and the measured price of sub-floor dimming. The
 backlight daemon will not sustain a cycle above 8 Hz (measured, enforced as a
-hard ceiling), and flicker fusion needs more than that - so Sublight tells you
+hard ceiling), and flicker fusion needs more than that — so Sublight tells you
 the truth instead of promising a steady glow it cannot produce.
 
-**Before you enable it:** flashing light in the 3-30 Hz range can trigger
+**Before you enable it:** flashing light in the 3–30 Hz range can trigger
 seizures in people with photosensitive epilepsy. Read [SAFETY.md](SAFETY.md)
-first, and do not use Sublight if you - or anyone who can see your keyboard - is
+first, and do not use Sublight if you — or anyone who can see your keyboard — is
 sensitive to flicker. The app asks for explicit consent the first time you
 enable dimming.
 
-Every claim above is a measurement, not an assumption - the boundary tables, the
+Every claim above is a measurement, not an assumption — the boundary tables, the
 daemon's cycle-period limit, and the read-back APIs that lie are documented in
 [docs/COREBRIGHTNESS.md](docs/COREBRIGHTNESS.md).
 

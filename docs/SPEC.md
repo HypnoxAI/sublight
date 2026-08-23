@@ -255,22 +255,44 @@ carry into any future work on this surface.
 normal. Four independent restore paths: the app's "Restore system control"
 button and "Quit" (both call `panicRestore`), `willTerminateNotification`
 (Cmd-Q / system termination), and the CLI's `restore` command, which builds a
-fresh bridge and works even after a `kill -9`. `panicRestore` is unconditional
-— stop the dither, force auto-brightness on, set a visible level — so it is
-safe from any state. Residual risk: a hard kill during the *off* phase of a
+fresh bridge and works even after a `kill -9`, plus dispatch signal sources for
+SIGTERM/SIGINT/SIGHUP that restore on the engine queue before exiting.
+`panicRestore` is unconditional — stop the dither, force auto-brightness on, set
+a visible level — so it is safe from any state. The app's *exit* paths use
+`restoreOnExit`, which is that same forced restore once the process has actually
+commanded the backlight and a no-op when it never has: launching Sublight and
+quitting must not overwrite a level the user set by hand. Residual risk: a hard kill during the *off* phase of a
 dither leaves the backlight off until `restore` is run or a brightness key is
 pressed; documented, and harmless.
 
-**Photosensitivity (central for the pulse feature).** The usable dither band
-(§5.2) is 3–8 Hz, and the sub-floor *pulse* modes (5–6 Hz) sit squarely in the
-3–30 Hz photosensitive-epilepsy trigger range (peak risk ~15–20 Hz). What
+**Photosensitivity (central to the whole app, not just one feature).** The
+usable dither band (§5.2) is 3–8 Hz, and *every* mode — Low 3, Medium 6, High 8
+— sits squarely in the 3–30 Hz photosensitive-epilepsy trigger range (peak risk
+~15–20 Hz). What
 keeps real risk low here is that the stimulus is a small, dim light in lower
 peripheral vision — seizure risk scales hard with visual-field coverage,
 luminance, and contrast, and a dim keyboard is a sliver of the field at low
 brightness. Two rules follow and are enforced in the UI/CLI: keep it dim
 (brightness is capped sub-floor; don't crank it for a "stronger" effect), and
-the photosensitivity warning travels with the feature. The 8 Hz mode reads
-as steady and is the recommended everyday mode; 5–6 Hz pulse is opt-in novelty.
+the photosensitivity warning travels with the feature.
+
+**There is no steady mode, and the UI must not imply one.** An earlier draft
+recommended ~8–10 Hz as reading steady. Measurement refutes it: fusing the
+dither needs a shorter cycle than the daemon will honour, and an observer
+watching 7 Hz and 8 Hz reports clear flicker at both. High is *dimmest and
+steadiest*, never *invisible*.
+
+**Consent (the enforced gate).** Because flicker is not a side effect but the
+mechanism, the first attempt to enable dimming — by either toggle, a preset
+chip, or the global hotkey — raises a modal stating plainly what the app does,
+**before any backlight command is issued**. Declining records nothing and
+changes nothing. Accepting writes a versioned marker beside the crash flag in
+Application Support (`ConsentMarker`), shared with the CLI, so bumping the
+version alongside the copy re-asks everyone. The schedule deliberately does not
+raise it — automation fires unattended — and instead records a pending flag that
+the popover surfaces the next time it is opened. The first-run onboarding window
+*informs*; it records nothing. The CLI does not block (it is a research harness)
+but points every mutating command at `SAFETY.md` until the marker exists.
 
 **Efficacy honesty.** The "pulse mode" is framed as experimental with no health
 claims. Flicker at a frequency does produce a real frequency-locked cortical
@@ -289,14 +311,28 @@ sublight/
 ├── Sources/
 │   ├── SublightKit/           the engine (UI-free, auditable, reusable)
 │   │   ├── KeyboardBrightnessBridge.swift   §4  private-API bridge + sig/dump
-│   │   ├── DitherEngine.swift               §5  timer-based dither
+│   │   ├── APISurface.swift                 §4  launch-time type-encoding probe
+│   │   ├── DitherEngine.swift               §5  anchored two-timer dither
+│   │   ├── DitherSchedule.swift             §5  pure anchor arithmetic
+│   │   ├── EngineQueue.swift                §5  the one serial queue
+│   │   ├── EngineCounters.swift             §9  command-truth counters + latency
+│   │   ├── BacklightCommanding.swift        §5.3 the hardware seam
 │   │   ├── BacklightController.swift        §5.3 unified setLevel routing
+│   │   ├── DimmingPolicy.swift              §8  running / glyph / schedule rules
+│   │   ├── ConsentMarker.swift              §7  versioned consent + pending flag
+│   │   ├── DirtyFlag.swift                  §7  crash marker, shared with the CLI
+│   │   ├── SignalRestore.swift              §7  SIGTERM/INT/HUP restore sources
+│   │   ├── StatusGlyph.swift                §8  code-drawn menu bar glyph
+│   │   ├── ScheduleWindow.swift             §6  window arithmetic (wraps midnight)
+│   │   ├── Solar.swift                      §6  local NOAA sunrise/sunset
+│   │   ├── CityDirectory.swift              §6  offline city → coordinates
 │   │   ├── HardwareInfo.swift               model/chip detection, Apple-Silicon gate
 │   │   ├── HotKey.swift                     Carbon RegisterEventHotKey wrapper
 │   │   ├── Log.swift                        os.Logger categories
-│   │   ├── StatusGlyph.swift                §8  code-drawn menu bar glyph
 │   │   └── SystemEvents.swift               §6.2 sleep/wake
-│   ├── sublight-cli/main.swift              CLI + the whole probe harness
+│   ├── sublight-cli/
+│   │   ├── main.swift                       CLI + the whole probe harness
+│   │   └── GlyphLegend.swift                dev: renders the menu-bar legend
 │   └── SublightApp/                         menu-bar app
 │       ├── SublightApp.swift                MenuBarExtra + Settings scenes
 │       ├── AppState.swift                   state, schedule, fade, crash marker
@@ -310,8 +346,12 @@ sublight/
 │                                            .icns is built at bundle time by make_app.sh (sips + iconutil → build/,
 │                                            gitignored); plus sublight-menubar-states.png, the menu bar
 │                                            legend regenerated by `sublight-cli glyph render`
+├── Tests/SublightKitTests/                  the pure logic: schedule, solar, dither
+│                                            arithmetic, dirty flag, consent, counters,
+│                                            glyph geometry, API-surface decisions
 ├── scripts/  (Info.plist, make_app.sh)      bundle + ad-hoc sign
-└── docs/  (SPEC, ROADMAP, APPSTORE_AND_HEALTH)
+├── SAFETY.md, DISCLAIMER                    what the flicker is, and who must not use it
+└── docs/  (SPEC, ROADMAP, COREBRIGHTNESS, APPSTORE_AND_HEALTH)
 ```
 
 ### Menu bar states
@@ -442,13 +482,23 @@ distribution is source: `git clone && swift build`.
 
 ## 11. Roadmap
 
-**Done (v0.3):** the mechanism is characterized; sub-floor dimming works;
-hybrid Simple/Advanced UI with 3/6/8 Hz presets and a 2–8 Hz custom slider;
-per-machine guided calibration (§9.1); manual time-of-day scheduling;
+**Done:** the mechanism is characterized; sub-floor dimming works; hybrid
+Simple/Advanced UI with 3/6/8 Hz presets and a 2–8 Hz custom slider;
+per-machine guided calibration (§9.1); manual and solar scheduling;
 launch-at-login (`SMAppService`); a dependency-free global hotkey (Carbon
-`RegisterEventHotKey`); first-run onboarding with the safety gate; a menu-bar
-icon that reflects active/idle; fade on transitions and slider debounce;
-crash-safe restore with structured logging; Apache-2.0 licensing with DCO.
+`RegisterEventHotKey`); first-run onboarding (informational) plus the versioned
+consent gate that fires before the first backlight command, with a deferred
+notice in the popover when the schedule skips one; a state-reflecting menu-bar
+icon with a legend rendered from the drawing code; fade on transitions and
+slider debounce; crash-safe restore with structured logging; Apache-2.0
+licensing with DCO.
+
+**Also done, and the reason several claims above changed:** command-truth
+instrumentation (§9) — scheduled/fired/executed/skipped counters and daemon
+latency at the bridge seam — which exonerated the engine over 9,270 edges and
+isolated the daemon's cycle-period limit. That produced the enforced 8.0 Hz
+stability ceiling, `High := the ceiling`, and the retraction of every
+"flicker-free" claim in this document. See `COREBRIGHTNESS.md`.
 
 Solar (sunset/sunrise) scheduling is also shipped, computed locally from a
 manually-entered location — deliberately *not* CoreLocation, which would add a

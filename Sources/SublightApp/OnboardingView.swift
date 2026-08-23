@@ -9,8 +9,15 @@
 //  what the app even was. This gives the warning room to be read, puts it in
 //  context, and hands over with a concrete next step.
 //
-//  The acknowledgment is a real gate: the continue button stays disabled until
-//  the checkbox is ticked. It is deliberately not pre-ticked.
+//  This screen INFORMS; it does not record consent. It used to carry a
+//  tick-box that gated everything downstream, which meant two separate
+//  acknowledgments existed — one here at first launch, and the versioned
+//  consent modal shown before the first backlight command. Two prompts for one
+//  fact trains people to dismiss both. The modal is now the sole recorded
+//  acknowledgment (it is versioned, shared with the CLI, and fires at the
+//  moment that actually matters), so this page is free to be what it always
+//  should have been: an explanation you can read without a checkbox in the
+//  way.
 //
 //  Licensed under the Apache License 2.0 — see LICENSE.
 //
@@ -22,7 +29,6 @@ struct OnboardingView: View {
 
     @EnvironmentObject var state: AppState
     @State private var page = 0
-    @State private var accepted = false
 
     var onFinish: (_ calibrateNow: Bool) -> Void
 
@@ -70,7 +76,6 @@ struct OnboardingView: View {
         case 1:
             Button("Continue") { page = 2 }
                 .keyboardShortcut(.defaultAction)
-                .disabled(!accepted)
         default:
             HStack(spacing: 8) {
                 Button("Skip for now") { onFinish(false) }
@@ -123,8 +128,6 @@ struct OnboardingView: View {
                 .font(.callout).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Toggle("I've read and understood this", isOn: $accepted)
-                .padding(.top, 4)
         }
     }
 

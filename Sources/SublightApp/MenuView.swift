@@ -25,14 +25,12 @@ struct MenuView: View {
         VStack(alignment: .leading, spacing: 11) {
             header
 
-            if state.available, state.acknowledged, state.consentPending, !state.consentGranted {
+            if state.available, state.consentPending, !state.consentGranted {
                 deferredConsentNotice
             }
 
             if !state.available {
                 unavailableView
-            } else if !state.acknowledged {
-                acknowledgmentView
             } else {
                 controls
             }
@@ -49,7 +47,7 @@ struct MenuView: View {
     /// not in a modal fired at an empty chair.
     private var deferredConsentNotice: some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text("A scheduled dim was skipped - Sublight needs one-time consent.")
+            Text("A scheduled dim was skipped — Sublight needs one-time consent.")
                 .font(.caption)
                 .fixedSize(horizontal: false, vertical: true)
             Button("Review and enable") { state.reviewConsentAndEnable() }
@@ -68,7 +66,7 @@ struct MenuView: View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 1) {
                 Text("Sublight").font(.headline)
-                if state.available && state.acknowledged {
+                if state.available {
                     Text(state.statusLine)
                         .font(.caption)
                         .foregroundStyle(state.isEnabled ? Color.green : Color.secondary)
@@ -76,7 +74,7 @@ struct MenuView: View {
             }
             .accessibilityElement(children: .combine)
             Spacer()
-            if state.available && state.acknowledged {
+            if state.available {
                 Button {
                     showSettings()
                 } label: {
@@ -125,19 +123,6 @@ struct MenuView: View {
             if !state.statusText.isEmpty {
                 Text(state.statusText).font(.caption2).foregroundStyle(.tertiary).textSelection(.enabled)
             }
-        }
-    }
-
-    private var acknowledgmentView: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Before you start").font(.subheadline).bold()
-            Text("Sublight dims the keyboard below its normal minimum by rapidly modulating the backlight. This produces flicker in a frequency range that can trigger seizures in people with photosensitive epilepsy. The light is small, dim, and peripheral, so risk is low — but if you have any history of photosensitivity or epilepsy, do not use this app.")
-                .font(.caption).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            Text("Any effect on mood or focus is unproven. Provided as-is with no warranty.")
-                .font(.caption2).foregroundStyle(.tertiary)
-                .fixedSize(horizontal: false, vertical: true)
-            Button("I understand — continue") { state.acknowledge() }
         }
     }
 

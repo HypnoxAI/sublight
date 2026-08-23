@@ -23,7 +23,8 @@
 //    Advanced → 3/6/8 Hz presets + 2–8 Hz custom slider + separate brightness.
 //  8 Hz is the measured stability ceiling, not a taste call — see
 //  DitherEngine.maxStableFrequencyHz. Nothing in the app can exceed it.
-//  All mode use gated behind a one-time photosensitivity acknowledgment.
+//  Nothing dims until the versioned consent modal has been accepted (see
+//  ConsentMarker); the first-run onboarding window informs but records nothing.
 //
 //  Schedule (manual time; sunset/sunrise is a later addition): transition-based
 //  auto-dim between a start and end time. Acts only on window ENTER/EXIT so the
@@ -77,7 +78,15 @@ final class AppState: ObservableObject {
     /// Mirror of the engine's state, delivered on the main actor.
     @Published private(set) var engineState: EngineState = .stopped
     @Published var advancedMode: Bool = false { didSet { onAdvancedChanged() } }
-    @Published var acknowledged: Bool = false
+    /// Whether the first-run onboarding window has already been shown.
+    ///
+    /// This used to be an acknowledgment that GATED every feature. It no
+    /// longer gates anything: the versioned consent modal (ConsentMarker) is
+    /// the sole recorded acknowledgment, and it fires before the first
+    /// backlight command rather than at launch. The stored key keeps its
+    /// original name so that anyone who already went through onboarding is
+    /// not shown it again — their data is reinterpreted, not discarded.
+    @Published var onboardingSeen: Bool = false
     /// Mirror of the shared consent marker (see ConsentMarker). Nothing may
     /// command the backlight until this is true.
     @Published private(set) var consentGranted: Bool = false
@@ -138,6 +147,10 @@ final class AppState: ObservableObject {
         static let brightness = "sublight.brightness"
         static let floor = "sublight.floor"
         static let advanced = "sublight.advanced"
+        /// Historically "the user accepted the safety warning"; now simply
+        /// "the onboarding window has been shown". The key name is kept so
+        /// existing installs are not walked through onboarding a second
+        /// time — the stored value is reinterpreted, never discarded.
         static let ack = "sublight.acknowledged"
         static let freq = "sublight.frequency"
         static let schedEnabled = "sublight.schedule.enabled"
@@ -162,7 +175,7 @@ final class AppState: ObservableObject {
 
     init() {
         advancedMode = defaults.bool(forKey: Keys.advanced)
-        acknowledged = defaults.bool(forKey: Keys.ack)
+        onboardingSeen = defaults.bool(forKey: Keys.ack)
         consentGranted = consent.isGranted
         consentPending = consent.isPending
         launchAtLogin = (SMAppService.mainApp.status == .enabled)
@@ -500,8 +513,8 @@ final class AppState: ObservableObject {
         return lines.joined(separator: "\n")
     }
 
-    func acknowledge() {
-        acknowledged = true
+    func markOnboardingSeen() {
+        onboardingSeen = true
         defaults.set(true, forKey: Keys.ack)
         // The gate is the "start here" moment, so always land on the calm
         // surface. A fresh install is already Simple; this also covers the
@@ -510,10 +523,11 @@ final class AppState: ObservableObject {
         if advancedMode { advancedMode = false }
     }
 
-    /// Re-arm the first-run photosensitivity gate (from Settings › Safety).
-    func showAcknowledgmentAgain() {
-        acknowledged = false
+    /// Show the first-run walkthrough again (from Settings › Safety).
+    func showOnboardingAgain() {
+        onboardingSeen = false
         defaults.removeObject(forKey: Keys.ack)
+        showOnboardingIfNeeded()
     }
 
     /// One-line state for the popover header.
@@ -732,7 +746,7 @@ final class AppState: ObservableObject {
     /// Act on window transitions only (enter → dim on, exit → dim off), so the
     /// user can override manually between transitions.
     private func reevaluateSchedule(force: Bool) {
-        guard scheduleEnabled, acknowledged else { return }
+        guard scheduleEnabled else { return }
         let now = inScheduleWindow()
         if force || now != lastInWindow {
             // Deliberately NOT the consent alert: the schedule fires
@@ -788,10 +802,10 @@ final class AppState: ObservableObject {
     // MARK: Global hotkey
 
     /// Toggle dimming from anywhere. Ignores the request when the engine is
-    /// unavailable or the safety gate hasn't been cleared — a global shortcut
-    /// must not be a way around the acknowledgment.
+    /// unavailable. It is NOT a way around the consent gate — it routes through
+    /// setEnabled, which raises the modal if consent has never been given.
     func toggleDimming() {
-        guard available, acknowledged else { return }
+        guard available else { return }
         setEnabled(!isEnabled)
         Log.lifecycle.info("hotkey toggled dimming")
     }
@@ -838,11 +852,11 @@ final class AppState: ObservableObject {
     /// rather than as a SwiftUI Window scene because an LSUIElement app has no
     /// natural moment to present a scene at launch.
     private func showOnboardingIfNeeded() {
-        guard !acknowledged, onboardingWindow == nil else { return }
+        guard !onboardingSeen, onboardingWindow == nil else { return }
 
         let view = OnboardingView { [weak self] calibrateNow in
             guard let self else { return }
-            self.acknowledge()
+            self.markOnboardingSeen()
             self.onboardingWindow?.close()
             self.onboardingWindow = nil
             if calibrateNow {
@@ -907,7 +921,7 @@ final class AppState: ObservableObject {
         for k in ["frequency", "floor", "date"] { defaults.removeObject(forKey: calKey(k)) }
     }
 
-    /// Fresh-install state (re-shows the acknowledgment). Leaves the system
+    /// Fresh-install state (revokes consent and re-shows onboarding). Leaves the system
     /// login item alone.
     func resetToDefaults() {
         scheduleEnabled = false
@@ -919,7 +933,7 @@ final class AppState: ObservableObject {
         scheduleStartMinutes = 21 * 60
         scheduleEndMinutes = 7 * 60
         scheduleFrequency = FrequencyPreset.high
-        acknowledged = false
+        onboardingSeen = false
         consent.clear()             // clears the pending flag too
         consentGranted = false
         consentPending = false

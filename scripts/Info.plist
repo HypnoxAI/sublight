@@ -23,6 +23,6 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
-	<string>MIT License — Sublight contributors</string>
+	<string>Apache License 2.0 — Copyright 2026 Hypnox Technologies LLC</string>
 </dict>
 </plist>

@@ -217,13 +217,15 @@ private struct SafetyTab: View {
 
             Section {
                 LabeledContent {
-                    Button("Show again…") { state.showAcknowledgmentAgain() }
-                        .accessibilityLabel("Show the safety warning again")
+                    Button("Show again…") { state.showOnboardingAgain() }
+                        .accessibilityLabel("Show the introduction again")
                 } label: {
-                    Text("Acknowledgment")
-                    Text(state.acknowledged ? "You've accepted the safety warning." : "Not yet accepted.")
+                    Text("Consent")
+                    Text(state.consentGranted
+                         ? "Given — you accepted the safety notice before dimming was first enabled."
+                         : "Not yet given — Sublight will ask before it first dims the keyboard.")
                         .font(.caption)
-                        .foregroundStyle(state.acknowledged ? Color.green : Color.orange)
+                        .foregroundStyle(state.consentGranted ? Color.green : Color.orange)
                 }
             }
 
