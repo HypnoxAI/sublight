@@ -312,7 +312,8 @@ are in [`docs/SPEC.md`](docs/SPEC.md).
 
 | Command | Purpose |
 |---|---|
-| `status` / `ids` | keyboard ID, reported level, auto-brightness state |
+| `status [--json]` / `ids` | keyboard ID, reported level, auto-brightness state |
+| `version` | version and build number |
 | `dump` / `sig` | private class's real selectors and their argument types |
 | `get` / `set <0..1>` | read / write brightness (subject to the clamp) |
 | `auto on\|off` | toggle keyboard auto-brightness |
@@ -323,7 +324,37 @@ are in [`docs/SPEC.md`](docs/SPEC.md).
 | `notify-probe` | change-notification spike |
 | `restore [<0..1>]` | panic restore |
 
+| `glyph render --out <dir>` | dev: redraw the menu bar legend from `StatusGlyph` |
+| `social-preview --out <dir>` | dev: redraw the GitHub social card |
+
 `hold` and `pulse` disable auto-brightness and restore it on Ctrl-C.
+`--verbose` echoes the resolved configuration and the API probe to **stderr**,
+so `status --json | jq` still works with it on.
+
+### `status --json`
+
+A versioned, stable schema — human status output may be reworded at any time,
+this may not. Its key set is pinned by a test.
+
+```
+schemaVersion                       bump = a field removed or changed meaning
+sublight   { version, build }
+hardware   { model, chip, appleSilicon }
+probe      { passed, macOSBuild, failures[] }     passed=false ⇒ nothing is driven
+keyboard   { id, reportedLevel, autoBrightness, idleDimmed, assumedFloor }
+engine     { mode, running, frequencyHz, duty, stabilityCeilingHz }
+consent    { granted, recordedVersion, requiredVersion, pending }
+suspended                           null from the CLI — see below
+counters   { high{…}, low{…}, latency{…}, … }    scheduled/fired/executed/skipped
+lastRecordedRun                     the last `hold --seconds` or `pair-sweep`, or null
+```
+
+Two things worth knowing before you parse it. **Unknown means `null`, never a
+plausible default** — `suspended` is null from the CLI because a CLI process has
+no sleep/wake observer and genuinely cannot answer; only the app can. And
+`keyboard.reportedLevel` is what the *daemon* claims, which is not what the LED
+is doing: see [finding 3](docs/COREBRIGHTNESS.md). Adding an optional field is
+backwards compatible and will not bump `schemaVersion`; removing one will.
 
 **If the backlight is ever left in a strange state** (e.g. after `kill -9`),
 `sublight-cli restore` fixes it from any state. The app also self-heals on next

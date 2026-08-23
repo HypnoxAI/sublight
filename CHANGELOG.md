@@ -10,6 +10,18 @@ stability on.
 
 ## [Unreleased]
 
+### Added
+- **`sublight-cli status --json`**, a versioned schema rather than scraped text:
+  version, hardware, probe result, keyboard state, engine mode/frequency/duty,
+  consent, counters, and the last recorded run. Unknown values are `null`, never
+  a plausible-looking default — `suspended` is null from the CLI because a CLI
+  process has no sleep/wake observer and cannot honestly answer. The key set is
+  pinned by a round-trip test, so a rename fails there rather than silently
+  downstream, and the shape is documented in the README.
+- **`sublight-cli version`**, and a `--verbose` flag that echoes the resolved
+  configuration and the API-surface probe to stderr — stderr specifically, so
+  `status --json | jq` still works with it on.
+
 ### Fixed
 - **Every err-dark skip the engine ever recorded was a bug, and it is gone.**
   `DitherSchedule.cycle(at:)` was plain integer division, so a `.strict` timer

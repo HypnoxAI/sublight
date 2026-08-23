@@ -25,7 +25,8 @@ func printUsage() {
 
         USAGE:
           sublight-cli version                    Print the version and exit
-          sublight-cli status                     Show keyboard ID, brightness, auto-brightness
+          sublight-cli status [--json]            Show keyboard ID, brightness, auto-brightness.
+                                                  --json emits a versioned, stable schema.
           sublight-cli ids                        List keyboard backlight IDs
           sublight-cli dump                       Print KeyboardBrightnessClient's REAL runtime
                                                   selectors (verify the bridge's table)
@@ -104,14 +105,23 @@ func printUsage() {
             log stream --level debug --predicate \
               'subsystem == "com.hypnox.sublight" AND category == "engine"'
 
+        GLOBAL OPTIONS:
+          --verbose   Echo the resolved configuration and the API-surface probe to
+                      stderr before doing anything. Stderr, so `status --json | jq`
+                      still works with it on. Per-command detail — every backlight
+                      write with its round-trip latency — is never printed here at
+                      any verbosity; it goes to the unified log at debug level,
+                      where it can be correlated with system events (see below).
+
         EXIT CODES:
           0   success
           1   usage error
           2   backlight unavailable (no Apple Silicon backlit keyboard, bridge failed)
           3   private-API probe failed: the CoreBrightness surface on this macOS build
               does not match what Sublight was verified against; nothing was touched.
-              Only `help`, `sig`, and `dump` run without the probe, so the drift can
-              be inspected.
+              The commands that never drive the backlight — `help`, `version`, `sig`,
+              `dump`, `glyph`, `social-preview` — run anyway, so the drift can be
+              inspected.
 
         SAFETY: every mode flickers the backlight in the 3-30 Hz photosensitive band.
         Read SAFETY.md before using this on anyone but yourself.
@@ -333,6 +343,11 @@ func makeController(args: [String]) -> BacklightController? {
         }
         if let period { controller.period = period }
         if let freq { controller.frequencyHz = freq }
+        vlog(
+            "keyboard \(controller.keyboardID), floor \(controller.floor), "
+                + "frequency \(controller.frequencyHz) Hz, "
+                + "ceiling \(DitherEngine.maxStableFrequencyHz) Hz")
+        vlog("hardware: \(HardwareInfo.current.summary)")
 
         // Crash recovery commands the backlight, so only after the API surface
         // was verified (never for the exempt read-only commands).
@@ -568,6 +583,19 @@ final class ProbeCounter: @unchecked Sendable {
 // MARK: - Entry
 
 let args = Array(CommandLine.arguments.dropFirst())
+
+/// Echo resolved configuration and probe details. Everything it writes goes to
+/// stderr, so machine-readable stdout stays parseable with it switched on.
+///
+/// Declared HERE, after `args`. Top-level globals initialise in source order,
+/// so reading `args` from a global declared above it compiles fine and then
+/// crashes at launch, before any command runs.
+let verbose = args.contains("--verbose")
+
+@MainActor
+func vlog(_ message: String) {
+    if verbose { fputs("verbose: \(message)\n", stderr) }
+}
 guard let command = args.first else {
     printUsage()
     exit(1)
@@ -590,6 +618,7 @@ if ![
         exit(3)
     }
     apiVerified = true
+    vlog(report.text.replacingOccurrences(of: "\n", with: " | "))
 }
 
 /// Commands that COMMAND the backlight. The CLI is a research harness and does
@@ -619,6 +648,41 @@ case "version", "--version", "-V":
 
 case "status":
     guard let c = makeController(args: args) else { exit(2) }
+    if args.contains("--json") {
+        let probe = validateAPISurface()
+        let hw = HardwareInfo.current
+        let report = StatusReport(
+            sublight: .init(
+                version: SublightVersion.current, build: SublightVersion.build),
+            hardware: .init(
+                model: hw.modelIdentifier, chip: hw.chip, appleSilicon: hw.isAppleSilicon),
+            probe: .init(
+                passed: probe.passed, macOSBuild: probe.macOSBuild,
+                failures: probe.failures.map(\.description)),
+            keyboard: .init(
+                id: c.keyboardID,
+                reportedLevel: c.reportedBrightness().map(Double.init),
+                autoBrightness: c.bridge.isAutoBrightnessEnabled(c.keyboardID),
+                idleDimmed: c.bridge.isBacklightDimmed(c.keyboardID),
+                assumedFloor: Double(c.floor)),
+            engine: .init(
+                state: c.engine.state,
+                stabilityCeilingHz: DitherEngine.maxStableFrequencyHz),
+            consent: .init(marker: ConsentMarker()),
+            // Null rather than false: this process has no sleep/wake observer,
+            // so it cannot answer. Only the app can.
+            suspended: nil,
+            counters: c.engine.counters,
+            lastRecordedRun: DiagnosticsStore.load())
+        do {
+            print(try report.json())
+            exit(0)
+        } catch {
+            fputs("error: could not encode status: \(error)\n", stderr)
+            exit(2)
+        }
+    }
+
     print("keyboard id      : \(c.keyboardID)")
     print(
         "reported level   : \(c.reportedBrightness().map { String(format: "%.4f", $0) } ?? "unavailable")"

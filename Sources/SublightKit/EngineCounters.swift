@@ -41,7 +41,7 @@ import Foundation
 // MARK: - Latency
 
 /// Round-trip latency of daemon calls, in milliseconds.
-public struct LatencyStats: Equatable, Codable {
+public struct LatencyStats: Equatable, Codable, Sendable {
 
     /// Samples retained for percentiles. Count/sum/max are exact over all
     /// time; percentiles are over this trailing window.
@@ -88,7 +88,7 @@ public struct LatencyStats: Equatable, Codable {
 
 /// One edge's tally. See the file header for what each field means; the
 /// distinction between `scheduled`, `fired` and `executed` is the whole point.
-public struct EdgeCounters: Equatable, Codable {
+public struct EdgeCounters: Equatable, Codable, Sendable {
     public var scheduled: UInt64 = 0
     public var fired: UInt64 = 0
     public var executed: UInt64 = 0
@@ -102,7 +102,7 @@ public struct EdgeCounters: Equatable, Codable {
 
 // MARK: - Counters
 
-public struct EngineCounters: Equatable, Codable {
+public struct EngineCounters: Equatable, Codable, Sendable {
 
     public var high = EdgeCounters()
     public var low = EdgeCounters()
@@ -348,7 +348,7 @@ public final class EngineDiagnostics: @unchecked Sendable {
 /// One recorded run, so `sublight-cli status` can report the counters of a
 /// process that has already exited. Diagnostics only: nothing reads this back
 /// into the engine, and deleting the file loses nothing but history.
-public struct DiagnosticsRecord: Codable, Equatable {
+public struct DiagnosticsRecord: Codable, Equatable, Sendable {
     public var label: String
     public var recordedAt: Date
     public var pid: Int32
