@@ -18,11 +18,11 @@
 import Foundation
 
 public enum SublightVersion {
-    /// Marketing version, e.g. "0.4.0". Also the git tag, prefixed with "v".
-    public static let current = "0.4.0"
+    /// Marketing version, e.g. "0.5.0". Also the git tag, prefixed with "v".
+    public static let current = "0.5.0"
     /// Monotonic build number for CFBundleVersion.
-    public static let build = "4"
+    public static let build = "5"
 
-    /// "0.4.0 (4)" — what `sublight-cli version` and the About pane show.
+    /// "0.5.0 (5)" — what `sublight-cli version` and the About pane show.
     public static var display: String { "\(current) (\(build))" }
 }

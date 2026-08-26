@@ -23,6 +23,58 @@ stability on.
   `status --json | jq` still works with it on.
 
 ### Fixed
+- **Long-run dark envelopes, seen at every frequency, are addressed structurally
+  — and the run that decides whether that was enough is now instrumented.**
+  The keys were observed dropping dark for stretches at Low, Medium *and* High,
+  with an onset around twenty minutes of leaving the machine alone. Two facts
+  shaped the response. The envelopes are frequency-**independent**, which the
+  obvious mechanism — two independent repeating timers drifting apart — does not
+  explain on its own, because that drift is frequency-dependent and would reach
+  Medium long before Low. And every soak in this project's history was five
+  minutes or shorter, so a twenty-minute-onset defect was invisible to all prior
+  measurement: no previous "steady" verdict covered this timescale.
+
+  So the change is both a structural fix and an instrument.
+
+  **The edge timers are phase-locked.** The two repeating `DispatchSourceTimer`s
+  are gone, replaced by one-shots armed only from absolute `DitherSchedule`
+  deadlines — never from `now + period`. Each HIGH edge arms this cycle's LOW,
+  then the next cycle's HIGH, and only then commands the daemon, so the XPC
+  round trip can stretch a handler but can never move a deadline. Re-deriving
+  both edges from the one anchor every cycle bounds their separation at a single
+  cycle by construction, where two free-running sources could separate without
+  limit. A skipped HIGH no longer arms its LOW — the cycle is deliberately dark,
+  and an OFF for a cycle that was never lit is a command with nothing to undo.
+  Two consecutive err-dark skips take a fresh anchor, on the reasoning that the
+  phase has stopped being trustworthy rather than that one edge ran late, and a
+  computed deadline that has somehow already passed is never armed at all (an
+  absolute past deadline fires the same turn and would spin the queue).
+  `DitherSchedule`'s arithmetic, the 2 ms early-fire guard, the 8 Hz stability
+  ceiling and the err-dark rule itself are all untouched.
+
+  **The engine now defends what a long idle attacks.** The `ProcessInfo`
+  activity assertion — `.latencyCritical` is what holds timer coalescing and
+  App Nap off these timers — is torn down and retaken with the same options
+  every ten minutes, because nothing can be asked whether an assertion is still
+  being honoured. The suppression keeper drops from 60 s to 2 s after any skip
+  and returns to 60 s after a clean tick; it reads both flags before
+  re-asserting and logs any flip with the elapsed run time attached.
+
+  **Every skip now records why.** One line per err-dark skip carrying the HIGH
+  edge's lateness, the LOW edge's lateness and whether it was the same cycle,
+  elapsed run time, the age of the last keeper tick — the keeper reads no user
+  input, so a stale one means the whole queue was starved, not one timer — and
+  both suppression flag states. Plus `anchorResets` and a histogram of skip
+  onset times, plus the existing `skipMaxRunLength` and
+  `longestExecutedHighGapMs`, all exposed through `status --json`.
+
+  That record is what makes the pending long soak conclusive rather than
+  suggestive: both timers late together points at coalescing or the activity
+  assertion, a suppression flag found flipped near an envelope points at the
+  backlight daemon, and a HIGH growing late while LOW stays punctual points at
+  timer drift. **The cause is not yet established, and this entry does not claim
+  the envelopes are gone** — it claims the phase can no longer drift unbounded,
+  and that the next occurrence will say what caused it.
 - **Every err-dark skip the engine ever recorded was a bug, and it is gone.**
   `DitherSchedule.cycle(at:)` was plain integer division, so a `.strict` timer
   firing microseconds *before* its deadline was binned into the previous cycle;

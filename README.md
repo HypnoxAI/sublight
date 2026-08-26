@@ -346,6 +346,8 @@ engine     { mode, running, frequencyHz, duty, stabilityCeilingHz }
 consent    { granted, recordedVersion, requiredVersion, pending }
 suspended                           null from the CLI — see below
 counters   { high{…}, low{…}, latency{…}, … }    scheduled/fired/executed/skipped
+           { anchorResets, skipOnsetBuckets{…},   long-run diagnosis: when skips
+             lastSkip{…} }                        started and which clock slipped
 lastRecordedRun                     the last `hold --seconds` or `pair-sweep`, or null
 ```
 

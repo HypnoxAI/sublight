@@ -24,6 +24,9 @@ final class RecordingCommander: BacklightCommanding {
     private let lock = NSLock()
     private var _entries: [Entry] = []
     var flips = SuppressionFlips()
+    /// Simulated daemon round trip, in seconds. Stands in for a slow XPC call
+    /// so a test can prove the schedule was already fixed before it was made.
+    var commandDelay: TimeInterval = 0
     /// Called on every command, before it is recorded (used to observe the
     /// dirty flag at the moment of the first command).
     var onCommand: ((Command) -> Void)?
@@ -38,7 +41,11 @@ final class RecordingCommander: BacklightCommanding {
         lock.unlock()
     }
 
-    func setBrightness(_ value: Float) -> Bool { record(.set(value)); return true }
+    func setBrightness(_ value: Float) -> Bool {
+        record(.set(value))
+        if commandDelay > 0 { Thread.sleep(forTimeInterval: commandDelay) }
+        return true
+    }
     func restoreSystemControl(level: Float) -> Bool {
         record(.restore(level)); return true
     }
@@ -348,6 +355,118 @@ final class DitherEngineTests: XCTestCase {
         XCTAssertGreaterThan(
             c.longestExecutedHighGapMs, c.nominalPeriodMs,
             "skipped cycles stretch the gap between executed ON commands")
+    }
+
+    // MARK: Phase-locked edges (directive #10)
+
+    func testNoSkipBurstInASteadyRun() {
+        // The defect these one-shots exist to remove is not a skip, it is a
+        // RUN of skips: one dark cycle is a flicker, several in a row is the
+        // dark envelope Omar sees. Re-arming both edges from the anchor on
+        // every HIGH edge is supposed to make a burst impossible in a steady
+        // run, so that is what is asserted — the goal state, not the mechanism.
+        engine.start(frequencyHz: 20, duty: 0.5)
+        wait(0.5)
+        let c = engine.counters
+        engine.restoreNow()
+
+        XCTAssertGreaterThan(c.high.executed, 5, "the run has to have actually run")
+        XCTAssertLessThanOrEqual(
+            c.skipMaxRunLength, 1,
+            "consecutive skips are a dark envelope; a steady run must never produce one")
+    }
+
+    func testDaemonLatencyStretchesAHandlerButNotThePeriod() {
+        // "Schedule first, XPC second", stated as its observable consequence:
+        // both next deadlines are armed before the daemon is spoken to, so a
+        // slow daemon can make a handler take longer without moving a single
+        // edge. A 10 ms command inside a 50 ms period would push the cadence
+        // to 60 ms if the arming happened after the call.
+        recorder.commandDelay = 0.010
+        engine.start(frequencyHz: 20, duty: 0.5)
+        wait(0.6)
+        let ons = recorder.entries.filter {
+            if case .set(let v) = $0.command { return v > 0 }
+            return false
+        }
+        engine.restoreNow()
+
+        XCTAssertGreaterThan(ons.count, 6)
+        let spacings = zip(ons, ons.dropFirst()).map { Double($1.at - $0.at) / 1e6 }
+            .sorted()
+        XCTAssertEqual(
+            spacings[spacings.count / 2], 50, accuracy: 5,
+            "median ON-to-ON spacing must stay the nominal period, not period + latency")
+    }
+
+    func testSetDutyCannotEmitAFullyBrightCycle() {
+        // Dropping an OFF edge whose deadline a duty change moved into the past
+        // would leave that cycle commanded ON for its whole period — 100 % duty,
+        // a visible brightening on every drag of the slider. `applyDuty`
+        // commands the OFF immediately instead. Two ON commands with no OFF
+        // between them is exactly what that failure looks like at the seam.
+        engine.start(frequencyHz: 20, duty: 0.85)
+        wait(0.15)
+        for d in [0.15, 0.85, 0.2, 0.8, 0.15, 0.5] {
+            engine.setDuty(d)
+            wait(0.04)
+        }
+        wait(0.1)
+        let levels = sets()
+        engine.restoreNow()
+
+        XCTAssertGreaterThan(levels.count, 8)
+        for (a, b) in zip(levels, levels.dropFirst()) {
+            XCTAssertFalse(
+                a > 0 && b > 0,
+                "two ON commands with no OFF between them is a 100 % bright cycle")
+        }
+    }
+
+    func testAPastDeadlineIsNeverArmed() {
+        // The re-anchor guard itself. An absolute deadline that has already
+        // passed fires on the very next turn of the queue, so arming one turns
+        // a re-arm into a spin; the engine must re-anchor instead.
+        let now: UInt64 = 1_000_000_000
+        XCTAssertTrue(DitherEngine.shouldReanchor(deadline: now - 1, now: now))
+        XCTAssertTrue(
+            DitherEngine.shouldReanchor(deadline: now, now: now),
+            "a deadline of exactly now is due now, and re-arming to it would spin")
+        XCTAssertFalse(DitherEngine.shouldReanchor(deadline: now + 1, now: now))
+    }
+
+    func testAHardStallRecoversOnCadenceInsteadOfSpinning() {
+        // The consequence of that guard, end to end: block the queue for five
+        // whole cycles, then check the engine comes back on cadence rather than
+        // firing a packed burst of caught-up edges (which is what an absolute
+        // past deadline, or a coalescing repeating timer, would produce).
+        engine.start(frequencyHz: 20, duty: 0.5)
+        wait(0.2)
+        engine.queue.async { Thread.sleep(forTimeInterval: 0.25) }
+        wait(0.3)
+
+        let after = recorder.entries.count
+        wait(0.4)
+        let ons = recorder.entries.dropFirst(after).filter {
+            if case .set(let v) = $0.command { return v > 0 }
+            return false
+        }
+        let c = engine.counters
+        engine.restoreNow()
+
+        XCTAssertTrue(c.high.executed > 0)
+        XCTAssertGreaterThan(ons.count, 4, "the engine must still be dithering")
+        XCTAssertLessThan(
+            ons.count, 20,
+            "0.4 s at 20 Hz is ~8 ON commands; a burst means deadlines were replayed")
+        let spacings = zip(ons, ons.dropFirst()).map { Double($1.at - $0.at) / 1e6 }
+            .sorted()
+        XCTAssertEqual(
+            spacings[spacings.count / 2], 50, accuracy: 5,
+            "median ON-to-ON spacing after the stall is the nominal period")
+        XCTAssertLessThanOrEqual(
+            c.skipMaxRunLength, 1,
+            "even a five-cycle stall must not produce consecutive skips")
     }
 
     func testStateChangeIsDeliveredOnMain() {
