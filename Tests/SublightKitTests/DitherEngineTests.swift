@@ -379,24 +379,49 @@ final class DitherEngineTests: XCTestCase {
     func testDaemonLatencyStretchesAHandlerButNotThePeriod() {
         // "Schedule first, XPC second", stated as its observable consequence:
         // both next deadlines are armed before the daemon is spoken to, so a
-        // slow daemon can make a handler take longer without moving a single
-        // edge. A 10 ms command inside a 50 ms period would push the cadence
-        // to 60 ms if the arming happened after the call.
-        recorder.commandDelay = 0.010
-        engine.start(frequencyHz: 20, duty: 0.5)
-        wait(0.6)
+        // slow daemon can make a handler take longer without moving an edge.
+        //
+        // Asserted as PHASE WALK, which is the one signature a skipped cycle
+        // cannot counterfeit. Two earlier forms of this test were wrong and are
+        // recorded here so they are not reinvented: comparing neighbouring
+        // ON-to-ON spacings to the period fails on a loaded CI runner, because
+        // a handler that misses its ON window makes the engine correctly err
+        // dark and that doubles one spacing; and comparing the whole SPAN to
+        // the nearest multiple of the period aliases to zero the moment
+        // accumulated drift reaches one full period.
+        //
+        // Phase does neither. A skipped cycle leaves every surviving ON at
+        // anchor + n x period, so its offset from the first ON stays congruent
+        // to zero. Latency leaking into the schedule walks that offset by the
+        // command's duration every cycle.
+        let periodMs = 100.0
+        recorder.commandDelay = 0.005
+        // Duty 0.85 gives an 85 ms ON window against a 5 ms command, so the
+        // err-dark rule stays out of this measurement even under load.
+        engine.start(frequencyHz: 10, duty: 0.85)
+        wait(1.2)
         let ons = recorder.entries.filter {
             if case .set(let v) = $0.command { return v > 0 }
             return false
         }
         engine.restoreNow()
 
-        XCTAssertGreaterThan(ons.count, 6)
-        let spacings = zip(ons, ons.dropFirst()).map { Double($1.at - $0.at) / 1e6 }
+        XCTAssertGreaterThan(ons.count, 6, "the run has to have actually run")
+        let firstMs = Double(ons.first!.at) / 1e6
+        let phaseErrors =
+            ons.dropFirst()
+            .map { e -> Double in
+                let elapsed = Double(e.at) / 1e6 - firstMs
+                return abs(elapsed - (elapsed / periodMs).rounded() * periodMs)
+            }
             .sorted()
-        XCTAssertEqual(
-            spacings[spacings.count / 2], 50, accuracy: 5,
-            "median ON-to-ON spacing must stay the nominal period, not period + latency")
+        // A 5 ms command that moved the schedule walks the phase 5 ms per
+        // cycle, so by the end of this run it is tens of ms off; edges locked
+        // to the anchor stay within timer jitter of zero.
+        XCTAssertLessThan(
+            phaseErrors[phaseErrors.count / 2], 10,
+            "median ON phase must stay locked to the anchor, not walk by the command duration"
+        )
     }
 
     func testSetDutyCannotEmitAFullyBrightCycle() {
@@ -460,10 +485,17 @@ final class DitherEngineTests: XCTestCase {
             ons.count, 20,
             "0.4 s at 20 Hz is ~8 ON commands; a burst means deadlines were replayed")
         let spacings = zip(ons, ons.dropFirst()).map { Double($1.at - $0.at) / 1e6 }
+        // Whole periods, not one exact period: a loaded machine may cost a
+        // cycle to the err-dark rule here and there, which is a 2-period gap
+        // and not a phase error. A gap that is NOT a multiple of the period is
+        // the thing that would mean the phase itself moved.
+        let deviations =
+            spacings
+            .map { abs($0 - ($0 / 50).rounded() * 50) }
             .sorted()
-        XCTAssertEqual(
-            spacings[spacings.count / 2], 50, accuracy: 5,
-            "median ON-to-ON spacing after the stall is the nominal period")
+        XCTAssertLessThan(
+            deviations[deviations.count / 2], 10,
+            "median ON-to-ON gap after the stall must be a whole number of periods")
         XCTAssertLessThanOrEqual(
             c.skipMaxRunLength, 1,
             "even a five-cycle stall must not produce consecutive skips")
