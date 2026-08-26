@@ -167,6 +167,97 @@ final class EngineCountersTests: XCTestCase {
     }
 }
 
+final class SkipDiagnosticTests: XCTestCase {
+
+    /// The 2 ms early-fire guard, in ms, as the 8 Hz schedule sees it.
+    private let guardMs = 2.0
+
+    func testTheRuleCallsAPunctualLowPunctualOnRealMeasurements() {
+        // Every pair below is a real skip from the 25-minute 8 Hz ceiling soak
+        // of 2026-08-26. In all fourteen the LOW edge stayed near its deadline
+        // while the HIGH edge ran 19-62 ms late, which is the shape that rules
+        // OUT a stalled queue. The first version of this rule compared LOW's
+        // lateness to the early-fire guard alone and reported "ALSO LATE" for
+        // nine of them, pointing the diagnosis at the wrong hypothesis. These
+        // numbers are kept as the regression.
+        let measured: [(high: Double, low: Double)] = [
+            (19.71, 0.48), (24.63, 10.72), (19.35, 0.91), (20.00, 1.04),
+            (19.30, 8.57), (21.32, 2.57), (21.13, 2.53), (61.85, 11.31),
+            (24.55, 1.69), (28.03, 1.52), (26.97, 4.10), (20.59, 2.31),
+            (20.54, 2.44), (37.09, 2.13),
+        ]
+        for m in measured {
+            XCTAssertFalse(
+                SkipDiagnostic.lowSlippedComparably(
+                    lowLatenessMs: m.low, highLatenessMs: m.high,
+                    earlyFireGuardMs: guardMs),
+                "HIGH \(m.high) ms / LOW \(m.low) ms is a punctual LOW, not a stalled queue"
+            )
+        }
+    }
+
+    func testTheRuleCallsAGenuinelyStalledQueueStalled() {
+        // Both edges dragged by roughly the same amount: the signature of the
+        // queue itself being starved rather than one timer running late.
+        for (high, low) in [(40.0, 38.0), (120.0, 110.0), (25.0, 20.0)] {
+            XCTAssertTrue(
+                SkipDiagnostic.lowSlippedComparably(
+                    lowLatenessMs: low, highLatenessMs: high,
+                    earlyFireGuardMs: guardMs),
+                "HIGH \(high) ms / LOW \(low) ms is both clocks slipping together")
+        }
+    }
+
+    func testTheEarlyFireGuardIsAFloorEvenWhenTheRatioWouldPass() {
+        // A tiny HIGH lateness makes almost any LOW lateness pass the ratio;
+        // the floor is what stops cycle-binning noise reading as a stall.
+        XCTAssertFalse(
+            SkipDiagnostic.lowSlippedComparably(
+                lowLatenessMs: 1.5, highLatenessMs: 2.0, earlyFireGuardMs: guardMs))
+    }
+
+    func testOnsetBucketsAreChronologicalWhenSorted() {
+        let labels = [30.0, 120.0, 400.0, 700.0, 1000.0, 1500.0, 2400.0, 5000.0]
+            .map { SkipDiagnostic.onsetBucket(elapsedSeconds: $0) }
+        XCTAssertEqual(labels, labels.sorted(), "sorted-key JSON must read in time order")
+        XCTAssertEqual(
+            labels.count, Set(labels).count, "each sample lands in its own bucket")
+        // Non-finite and negative elapsed must not fall through to the last bucket.
+        XCTAssertEqual(SkipDiagnostic.onsetBucket(elapsedSeconds: .nan), "00-01m")
+        XCTAssertEqual(SkipDiagnostic.onsetBucket(elapsedSeconds: -5), "00-01m")
+    }
+
+    func testTheSkipRingIsBoundedAndKeepsTheNEWESTRecords() {
+        let d = EngineDiagnostics()
+        for i in 0..<(EngineCounters.skipWindow + 12) {
+            var rec = SkipDiagnostic()
+            rec.cycle = UInt64(i)
+            rec.elapsedRunSeconds = 30
+            d.noteHighSkipped(latenessMs: 20, thresholdMs: 18.75, diagnostic: rec)
+        }
+        let c = d.snapshot()
+        XCTAssertEqual(c.high.skipped, UInt64(EngineCounters.skipWindow + 12))
+        XCTAssertEqual(
+            c.recentSkips.count, EngineCounters.skipWindow, "the ring is bounded")
+        XCTAssertEqual(
+            c.recentSkips.last?.cycle, UInt64(EngineCounters.skipWindow + 11),
+            "the newest record survives")
+        XCTAssertEqual(
+            c.recentSkips.first?.cycle, 12,
+            "the oldest records are the ones dropped")
+        XCTAssertEqual(c.lastSkip?.cycle, UInt64(EngineCounters.skipWindow + 11))
+        XCTAssertEqual(
+            c.skipOnsetBuckets["00-01m"], UInt64(EngineCounters.skipWindow + 12))
+    }
+
+    func testLowToHighRatioIsZeroRatherThanNaNWhenHighWasNotLate() {
+        var rec = SkipDiagnostic()
+        rec.highLatenessMs = 0
+        rec.lowLatenessMs = 5
+        XCTAssertEqual(rec.lowToHighLatenessRatio, 0, "no divide-by-zero in a log line")
+    }
+}
+
 final class WritePaddingTests: XCTestCase {
 
     func testPaddedValueStaysInsideTheSameSixteenthStepAndIsDistinct() {

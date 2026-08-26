@@ -673,7 +673,13 @@ public final class DitherEngine: @unchecked Sendable {
         d.highLatenessMs = highLatenessMs
         d.lowLatenessMs = lastLowLatenessMs
         d.lowWasSameCycle = lastLowCycle == n
-        d.lowAlsoLate = lastLowLatenessMs > Double(s.earlyFireGuard) / 1e6
+        // COMPARABLE slip, not any slip — see `SkipDiagnostic.lowAlsoLate`. The
+        // early-fire guard is the floor, so binning noise cannot trip it; the
+        // half-of-HIGH ratio is what actually separates "the queue stalled and
+        // took both edges with it" from "one edge ran late".
+        d.lowAlsoLate = SkipDiagnostic.lowSlippedComparably(
+            lowLatenessMs: lastLowLatenessMs, highLatenessMs: highLatenessMs,
+            earlyFireGuardMs: Double(s.earlyFireGuard) / 1e6)
         d.elapsedRunSeconds =
             runStartNanos.map { Double(now > $0 ? now - $0 : 0) / 1e9 } ?? 0
         d.secondsSinceKeeperTick =

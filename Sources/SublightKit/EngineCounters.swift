@@ -96,7 +96,15 @@ public struct EdgeCounters: Equatable, Codable, Sendable {
 
     public init() {}
 
-    /// Deadlines the repeating timer merged away because the queue was busy.
+    /// Deadlines that came due by anchor arithmetic but whose handler never ran.
+    ///
+    /// READ THIS DIFFERENTLY FOR THE TWO EDGES, since 0.5.0 made them one-shots.
+    /// For HIGH it is what it always was: a deadline the queue was too busy to
+    /// reach. For LOW it is dominated by a deliberate policy — a skipped HIGH
+    /// does not arm its LOW, so every err-dark skip adds one here. A run with
+    /// `high.skipped == low.coalesced` is therefore the EXPECTED shape, not a
+    /// sign that LOW edges were lost. The name is kept because the arithmetic
+    /// is unchanged and a rename would break `status --json` consumers.
     public var coalesced: UInt64 { scheduled > fired ? scheduled - fired : 0 }
 }
 
@@ -128,8 +136,17 @@ public struct SkipDiagnostic: Equatable, Codable, Sendable {
     /// True when that LOW edge belonged to the same cycle as the skipped HIGH,
     /// so `lowLatenessMs` is a same-cycle comparison rather than a stale one.
     public var lowWasSameCycle: Bool = false
-    /// True when the LOW edge was itself late by more than the early-fire
-    /// guard — i.e. BOTH timers slipped, not just the HIGH one.
+    /// True when the LOW edge slipped COMPARABLY to the HIGH one — the signal
+    /// that the whole queue stalled rather than one timer running late.
+    ///
+    /// Set against half the HIGH edge's lateness, not against a fixed number.
+    /// The first version of this compared LOW's lateness to the 2 ms early-fire
+    /// guard, which is a cycle-binning constant and not a claim about what
+    /// counts as late; a soak then reported "ALSO LATE" for a LOW edge 2.13 ms
+    /// behind a HIGH edge 37 ms behind, which is a punctual LOW by any reading.
+    /// That error biased the discrimination toward "both timers late", i.e.
+    /// toward exactly the wrong hypothesis. See `lowToHighLatenessRatio`, which
+    /// is reported alongside so the boolean can be checked rather than trusted.
     public var lowAlsoLate: Bool = false
     /// Seconds since the run started. The whole point: a defect with a ~20 min
     /// onset is invisible to a 5 min soak, so onset time is a first-class
@@ -162,14 +179,34 @@ public struct SkipDiagnostic: Equatable, Codable, Sendable {
         }
     }
 
+    /// LOW's lateness as a fraction of HIGH's. Near 1 means both clocks slipped
+    /// together; near 0 means only the HIGH edge did. Zero when HIGH was not
+    /// late at all, which cannot happen for a recorded skip.
+    public var lowToHighLatenessRatio: Double {
+        highLatenessMs > 0 ? lowLatenessMs / highLatenessMs : 0
+    }
+
+    /// THE DISCRIMINATION RULE, as a pure function so it can be pinned by a test
+    /// with real measurements rather than re-derived by eye at each soak.
+    ///
+    /// Two conditions, and both matter. The floor keeps cycle-binning noise out.
+    /// The ratio is what actually separates the hypotheses: a stalled queue
+    /// takes both edges with it and they slip together, whereas one timer
+    /// running late leaves the other where the anchor put it.
+    public static func lowSlippedComparably(
+        lowLatenessMs: Double, highLatenessMs: Double, earlyFireGuardMs: Double
+    ) -> Bool {
+        lowLatenessMs > earlyFireGuardMs && lowLatenessMs >= 0.5 * highLatenessMs
+    }
+
     /// The one-line discrimination record, as it goes to the log and the report.
     public var line: String {
         String(
             format:
-                "cycle %llu  HIGH late %.2f ms  LOW late %.2f ms (%@, %@)  t+%.1f s  keeper %+.1f s ago  autoBrightnessOn=%@ idleDimSuspended=%@",
+                "cycle %llu  HIGH late %.2f ms  LOW late %.2f ms (%@, %@, LOW/HIGH %.2f)  t+%.1f s  keeper %+.1f s ago  autoBrightnessOn=%@ idleDimSuspended=%@",
             cycle, highLatenessMs, lowLatenessMs,
             lowWasSameCycle ? "same cycle" : "previous cycle",
-            lowAlsoLate ? "ALSO LATE" : "punctual",
+            lowAlsoLate ? "ALSO LATE" : "punctual", lowToHighLatenessRatio,
             elapsedRunSeconds, secondsSinceKeeperTick,
             autoBrightnessOn.map { $0 ? "true" : "false" } ?? "n/a",
             idleDimSuspended.map { $0 ? "true" : "false" } ?? "n/a")
@@ -209,6 +246,19 @@ public struct EngineCounters: Equatable, Codable, Sendable {
     /// be adjudicated from `status --json` alone instead of by log scraping.
     public var lastSkip: SkipDiagnostic?
 
+    /// Trailing window of skip records, newest last.
+    ///
+    /// `lastSkip` alone was not enough and a soak proved it: fourteen skips in
+    /// twenty-five minutes, and the single retained record could not show that
+    /// LOW stayed punctual across ALL of them while HIGH clustered just above
+    /// the threshold — which is the finding. One sample cannot distinguish a
+    /// pattern from an outlier, so the pattern is kept. Bounded, like the
+    /// latency ring, so a week-long run costs the same as a minute-long one.
+    public var recentSkips: [SkipDiagnostic] = []
+
+    /// How many skip records `recentSkips` retains.
+    public static let skipWindow = 32
+
     /// Schedule in force, for reading the numbers above against.
     public var nominalPeriodMs: Double = 0
     public var nominalOnWindowMs: Double = 0
@@ -223,6 +273,7 @@ public struct EngineCounters: Equatable, Codable, Sendable {
     enum CodingKeys: String, CodingKey {
         case high, low, skipMaxLatenessMs, skipLastThresholdMs, skipMaxRunLength
         case longestExecutedHighGapMs, anchorResets, skipOnsetBuckets, lastSkip
+        case recentSkips
         case nominalPeriodMs, nominalOnWindowMs, latency, commandsByKind
     }
 
@@ -242,6 +293,7 @@ public struct EngineCounters: Equatable, Codable, Sendable {
         try c.encode(anchorResets, forKey: .anchorResets)
         try c.encode(skipOnsetBuckets, forKey: .skipOnsetBuckets)
         try c.encode(lastSkip, forKey: .lastSkip)
+        try c.encode(recentSkips, forKey: .recentSkips)
         try c.encode(nominalPeriodMs, forKey: .nominalPeriodMs)
         try c.encode(nominalOnWindowMs, forKey: .nominalOnWindowMs)
         try c.encode(latency, forKey: .latency)
@@ -287,8 +339,14 @@ public struct EngineCounters: Equatable, Codable, Sendable {
         let onset = skipOnsetBuckets.sorted { $0.key < $1.key }
             .map { "\($0.key)=\($0.value)" }.joined(separator: "  ")
         out.append(indent + "skip onset: " + (onset.isEmpty ? "(none)" : onset))
-        if let lastSkip {
-            out.append(indent + "last skip: " + lastSkip.line)
+        if !recentSkips.isEmpty {
+            let shown = recentSkips.suffix(10)
+            let elided = recentSkips.count - shown.count
+            out.append(
+                indent
+                    + "recent skips (\(recentSkips.count) retained"
+                    + (elided > 0 ? ", \(elided) older not shown" : "") + "):")
+            for skip in shown { out.append(indent + "  " + skip.line) }
         }
         return out.joined(separator: "\n")
     }
@@ -437,6 +495,11 @@ public final class EngineDiagnostics: @unchecked Sendable {
         if skipRun > counters.skipMaxRunLength { counters.skipMaxRunLength = skipRun }
         if let diagnostic {
             counters.lastSkip = diagnostic
+            counters.recentSkips.append(diagnostic)
+            if counters.recentSkips.count > EngineCounters.skipWindow {
+                counters.recentSkips.removeFirst(
+                    counters.recentSkips.count - EngineCounters.skipWindow)
+            }
             let bucket = SkipDiagnostic.onsetBucket(
                 elapsedSeconds: diagnostic.elapsedRunSeconds)
             counters.skipOnsetBuckets[bucket, default: 0] &+= 1

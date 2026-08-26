@@ -62,11 +62,25 @@ stability on.
 
   **Every skip now records why.** One line per err-dark skip carrying the HIGH
   edge's lateness, the LOW edge's lateness and whether it was the same cycle,
-  elapsed run time, the age of the last keeper tick — the keeper reads no user
-  input, so a stale one means the whole queue was starved, not one timer — and
-  both suppression flag states. Plus `anchorResets` and a histogram of skip
-  onset times, plus the existing `skipMaxRunLength` and
+  their ratio, elapsed run time, the age of the last keeper tick — the keeper
+  reads no user input, so a stale one means the whole queue was starved, not one
+  timer — and both suppression flag states. A bounded trailing window of those
+  records is retained, not just the most recent one: a soak producing fourteen
+  skips showed that a single sample cannot tell a pattern from an outlier, and
+  the pattern was the finding. Plus `anchorResets` and a histogram of skip onset
+  times, alongside the existing `skipMaxRunLength` and
   `longestExecutedHighGapMs`, all exposed through `status --json`.
+
+  The rule deciding whether the LOW edge "also ran late" is a pure function
+  pinned by a test against real measurements. Its first version compared LOW's
+  lateness to the 2 ms early-fire guard — a cycle-binning constant, not a claim
+  about lateness — and so reported a LOW edge 2.13 ms behind a HIGH edge 37 ms
+  behind as "also late", biasing the diagnosis toward a stalled queue. It now
+  requires LOW to have slipped at least half as far as HIGH.
+
+  Note for anyone reading the counters: `low.coalesced` is expected to equal
+  `high.skipped`. A skipped HIGH deliberately does not arm its LOW, so each skip
+  leaves one LOW deadline unfired. That is the policy working, not lost edges.
 
   That record is what makes the pending long soak conclusive rather than
   suggestive: both timers late together points at coalescing or the activity
