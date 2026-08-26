@@ -377,50 +377,45 @@ final class DitherEngineTests: XCTestCase {
     }
 
     func testDaemonLatencyStretchesAHandlerButNotThePeriod() {
-        // "Schedule first, XPC second", stated as its observable consequence:
-        // both next deadlines are armed before the daemon is spoken to, so a
-        // slow daemon can make a handler take longer without moving an edge.
+        // "Schedule first, XPC second", asserted as EDGE RATE over a fixed
+        // wall-clock window — the one consequence a loaded machine cannot fake.
         //
-        // Asserted as PHASE WALK, which is the one signature a skipped cycle
-        // cannot counterfeit. Two earlier forms of this test were wrong and are
-        // recorded here so they are not reinvented: comparing neighbouring
-        // ON-to-ON spacings to the period fails on a loaded CI runner, because
-        // a handler that misses its ON window makes the engine correctly err
-        // dark and that doubles one spacing; and comparing the whole SPAN to
-        // the nearest multiple of the period aliases to zero the moment
-        // accumulated drift reaches one full period.
+        // Absolute deadlines mean the number of HIGH edges in T seconds is T x f
+        // no matter how late any individual edge runs: a delayed handler still
+        // runs, and the next one was armed from the anchor before the delay
+        // happened. Latency leaking into the schedule instead lengthens every
+        // cycle by the command's duration, so the rate itself drops.
         //
-        // Phase does neither. A skipped cycle leaves every surviving ON at
-        // anchor + n x period, so its offset from the first ON stays congruent
-        // to zero. Latency leaking into the schedule walks that offset by the
-        // command's duration every cycle.
-        let periodMs = 100.0
-        recorder.commandDelay = 0.005
-        // Duty 0.85 gives an 85 ms ON window against a 5 ms command, so the
-        // err-dark rule stays out of this measurement even under load.
-        engine.start(frequencyHz: 10, duty: 0.85)
-        wait(1.2)
-        let ons = recorder.entries.filter {
-            if case .set(let v) = $0.command { return v > 0 }
-            return false
-        }
+        // THREE EARLIER FORMS OF THIS TEST WERE WRONG. Recorded so they are not
+        // reinvented. (1) Neighbouring ON-to-ON spacing: a handler that misses
+        // its ON window makes the engine correctly err dark, which doubles one
+        // spacing and reads as drift. (2) Span against the nearest multiple of
+        // the period: aliases to zero once accumulated drift reaches one full
+        // period, silently ceasing to detect the defect. (3) Median phase error
+        // against the anchor: sound in principle, but CI measured 17.5 ms of
+        // median timer jitter on a loaded runner, which swamps the drift being
+        // looked for. Rate is immune to all three, because jitter does not
+        // change how many deadlines fall inside a window.
+        let seconds = 4.0
+        let hz = 5.0
+        recorder.commandDelay = 0.070
+        // Duty 0.85 gives a 170 ms ON window against a 70 ms command, so the
+        // err-dark rule stays out of this measurement even under load. Skipped
+        // edges would not affect it anyway: `fired` counts handler runs.
+        engine.start(frequencyHz: hz, duty: 0.85)
+        wait(seconds)
+        let c = engine.counters
         engine.restoreNow()
 
-        XCTAssertGreaterThan(ons.count, 6, "the run has to have actually run")
-        let firstMs = Double(ons.first!.at) / 1e6
-        let phaseErrors =
-            ons.dropFirst()
-            .map { e -> Double in
-                let elapsed = Double(e.at) / 1e6 - firstMs
-                return abs(elapsed - (elapsed / periodMs).rounded() * periodMs)
-            }
-            .sorted()
-        // A 5 ms command that moved the schedule walks the phase 5 ms per
-        // cycle, so by the end of this run it is tens of ms off; edges locked
-        // to the anchor stay within timer jitter of zero.
-        XCTAssertLessThan(
-            phaseErrors[phaseErrors.count / 2], 10,
-            "median ON phase must stay locked to the anchor, not walk by the command duration"
+        // A 70 ms command that moved the schedule stretches the cycle from
+        // 200 ms to 270 ms, cutting the edge count by a quarter. The allowance
+        // below sits well clear of that on both sides: the honest engine can
+        // lose three whole edges to load and still pass, and the defect misses
+        // by more than two.
+        let expected = seconds * hz
+        XCTAssertGreaterThanOrEqual(
+            Double(c.high.fired), expected * 0.85,
+            "HIGH edges must keep the anchor's rate; a command that moved the schedule would slow it to \(seconds / (1 / hz + recorder.commandDelay)) edges"
         )
     }
 
