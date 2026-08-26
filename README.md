@@ -264,8 +264,10 @@ encodings on your machine and whether they match. Please add a row.
 ### Re-qualifying after a macOS update
 
 The launch probe catches interface drift on its own. The **ceiling** it cannot
-see, so check it by hand — it takes five minutes and your eyes are the only
-instrument that works:
+see, so check it by hand — your eyes are the only instrument that works. There
+are two runs, and they look for different faults.
+
+**1. The ceiling check — five minutes.**
 
 ```bash
 sublight-cli hold --freq 8 --duty 0.15 --seconds 300
@@ -276,11 +278,35 @@ Watch the keys at roughly **0:30**, **2:30** and **4:30**. You are looking for a
 more and then returning, repeating every one to three seconds. Steady flicker is
 the expected, healthy result — the dither is supposed to be visible.
 
-**Any dark envelope at any glance means the ceiling no longer holds.** Find the
-lowest frequency that still fails, subtract 0.5 Hz, and that is the new value for
-`DitherEngine.maxStableFrequencyHz`. Please
+**2. The idle check — twenty-five minutes, hands off.**
+
+```bash
+sublight-cli hold --freq 8 --duty 0.15 --seconds 1500
+```
+
+Start it and then **do not touch the trackpad, keyboard, or wake anything until
+it finishes** — being idle is the condition under test, and one keypress resets
+it. Glance at the keys at roughly **0:30**, **10:00**, **18:00**, **22:00** and
+**25:00**; note each verdict on paper or a phone rather than typing it.
+
+This run exists because of a defect found on 2026-08-26: dark envelopes at
+*every* frequency, with an onset around twenty minutes of the machine being left
+alone. Every soak in this project's history before that date was five minutes or
+shorter, so a twenty-minute-onset fault was invisible to all prior measurement.
+A clean five-minute run says nothing about this timescale.
+
+When it exits, read the counters it prints — `skipMaxRunLength` should be 0 or 1,
+and `longest gap between EXECUTED HIGH commands` should be about one period, not
+seconds. If anything skipped, `sublight-cli status --json` carries a `lastSkip`
+record with both edges' lateness, how far into the run it happened, and the
+suppression flag states, which is what separates a timer fault from the daemon
+taking the backlight back.
+
+**Any dark envelope at any glance, in either run, means the ceiling no longer
+holds.** Find the lowest frequency that still fails, subtract 0.5 Hz, and that is
+the new value for `DitherEngine.maxStableFrequencyHz`. Please
 [file an issue](https://github.com/HypnoxAI/sublight/issues) with your macOS
-build, your Mac model, and what you saw.
+build, your Mac model, what you saw, and the counters from the run.
 
 ### Related projects
 

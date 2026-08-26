@@ -140,11 +140,18 @@ public final class DitherEngine: @unchecked Sendable {
     ///   • Measured on Mac16,12 (M4) / macOS 26.6.1, 2026-08-23.
     ///   • Margin 0.5 Hz below the 8.5 Hz first failure, per user policy.
     ///
-    /// RE-QUALIFY AFTER ANY macOS UPDATE via the soak ritual:
-    ///     sublight-cli hold --freq 8 --duty 0.15 --seconds 300
-    /// watching the keys, with glances at ~0:30 / ~2:30 / ~4:30. Any dark
-    /// envelope at any glance means the boundary moved: the new first-failure
-    /// frequency minus 0.5 Hz becomes this constant.
+    /// RE-QUALIFY AFTER ANY macOS UPDATE via the soak ritual, which is TWO
+    /// runs (see README, "Re-qualifying after a macOS update"):
+    ///     sublight-cli hold --freq 8 --duty 0.15 --seconds 300   glances 0:30/2:30/4:30
+    ///     sublight-cli hold --freq 8 --duty 0.15 --seconds 1500  hands off the machine
+    /// Any dark envelope at any glance means the boundary moved: the new
+    /// first-failure frequency minus 0.5 Hz becomes this constant.
+    ///
+    /// The 1500 s run is not a longer version of the 300 s one. Every soak in
+    /// this project's history before 2026-08-26 was <= 5 minutes, and the
+    /// long-run envelopes fixed in 0.5.0 had an onset near TWENTY minutes, so
+    /// no short run could have seen them. Idle is the condition under test:
+    /// the machine must not be touched for the duration.
     public static let maxStableFrequencyHz: Double = 8.0
 
     /// What the app and the CLI will run. The upper bound IS the ceiling.

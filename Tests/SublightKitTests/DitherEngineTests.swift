@@ -43,7 +43,19 @@ final class RecordingCommander: BacklightCommanding {
 
     func setBrightness(_ value: Float) -> Bool {
         record(.set(value))
-        if commandDelay > 0 { Thread.sleep(forTimeInterval: commandDelay) }
+        // BUSY-WAIT, not Thread.sleep. A sleep on a loaded CI runner overshoots
+        // by however much the scheduler feels like, which silently turns a
+        // controlled 70 ms command into a 150 ms one and saturates the engine
+        // queue — the exact confound that made an earlier version of the
+        // latency test fail on macos-15 with the same edge count as a genuinely
+        // broken engine. Spinning on the monotonic clock costs a core but takes
+        // exactly as long as it is told to.
+        if commandDelay > 0 {
+            let until =
+                DispatchTime.now().uptimeNanoseconds
+                + UInt64(commandDelay * 1e9)
+            while DispatchTime.now().uptimeNanoseconds < until {}
+        }
         return true
     }
     func restoreSystemControl(level: Float) -> Bool {
@@ -322,10 +334,19 @@ final class DitherEngineTests: XCTestCase {
         engine.start(frequencyHz: 20, duty: 0.5)
         wait(0.2)
         XCTAssertGreaterThan(engine.counters.high.executed, 0)
+        // STOP FIRST. Resetting a live tally and immediately reading it back
+        // races the next edge, which is 50 ms away at most: any edge landing in
+        // between legitimately counts and the read is non-zero through no fault
+        // of `reset()`. CI caught this as `scheduled == 1` — an edge at cycle 0,
+        // i.e. the first one after a re-anchor. What this test means to pin is
+        // that reset zeroes the tally, so it stops the engine and pins exactly
+        // that, with nothing left running to put a number back.
+        engine.restoreNow()
         engine.resetCounters()
         XCTAssertEqual(engine.counters.high.executed, 0)
         XCTAssertEqual(engine.counters.high.scheduled, 0)
-        engine.restoreNow()
+        XCTAssertEqual(engine.counters.low.executed, 0)
+        XCTAssertEqual(engine.counters.high.skipped, 0)
     }
 
     func testAStalledQueueProducesErrDarkSkipsAndTheyAreCounted() {
@@ -398,8 +419,8 @@ final class DitherEngineTests: XCTestCase {
         // change how many deadlines fall inside a window.
         let seconds = 4.0
         let hz = 5.0
-        recorder.commandDelay = 0.070
-        // Duty 0.85 gives a 170 ms ON window against a 70 ms command, so the
+        recorder.commandDelay = 0.040
+        // Duty 0.85 gives a 170 ms ON window against a 40 ms command, so the
         // err-dark rule stays out of this measurement even under load. Skipped
         // edges would not affect it anyway: `fired` counts handler runs.
         engine.start(frequencyHz: hz, duty: 0.85)
@@ -407,14 +428,14 @@ final class DitherEngineTests: XCTestCase {
         let c = engine.counters
         engine.restoreNow()
 
-        // A 70 ms command that moved the schedule stretches the cycle from
-        // 200 ms to 270 ms, cutting the edge count by a quarter. The allowance
-        // below sits well clear of that on both sides: the honest engine can
-        // lose three whole edges to load and still pass, and the defect misses
-        // by more than two.
+        // A 40 ms command that moved the schedule stretches the cycle from
+        // 200 ms to 240 ms, costing a sixth of the edges. Two commands per cycle
+        // occupy the queue 40 % of the time, which leaves enough slack that a
+        // slow machine does not lose edges on its own — an earlier version used
+        // 70 ms and did exactly that on CI.
         let expected = seconds * hz
         XCTAssertGreaterThanOrEqual(
-            Double(c.high.fired), expected * 0.85,
+            Double(c.high.fired), expected * 0.90,
             "HIGH edges must keep the anchor's rate; a command that moved the schedule would slow it to \(seconds / (1 / hz + recorder.commandDelay)) edges"
         )
     }

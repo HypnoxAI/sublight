@@ -79,9 +79,16 @@ Read the counters, not your impression of them: `scheduled` / `fired` /
 did not act on it", which is the distinction almost every backlight bug turns
 on. Per-command detail is in the unified log at debug level (below).
 
-If you changed the frequency band or the ceiling, re-run the five-minute soak
-in the README's "Re-qualifying after a macOS update" and watch the keys at
-roughly 0:30, 2:30 and 4:30.
+If you changed the frequency band or the ceiling, re-run BOTH soaks in the
+README's "Re-qualifying after a macOS update": the five-minute ceiling check
+(glances at 0:30, 2:30, 4:30) and the twenty-five-minute idle check (hands off
+the machine entirely, glances at 0:30, 10:00, 18:00, 22:00, 25:00).
+
+The second one is not optional and not a longer version of the first. Every soak
+in this project's history before 2026-08-26 was five minutes or shorter, and the
+long-run dark envelopes fixed in 0.5.0 had an onset around twenty minutes — no
+five-minute run could have seen them. If you are touching anything that changes
+when edges are scheduled, the short run cannot clear it.
 
 ## Formatting and style
 
