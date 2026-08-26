@@ -258,3 +258,86 @@ final class DirtyFlagTests: XCTestCase {
         XCTAssertNil(defaults.object(forKey: DirtyFlag.legacyDefaultsKey))
     }
 }
+
+final class LiveOwnerTests: XCTestCase {
+
+    private var dir: URL!
+    private var defaults: UserDefaults!
+    private var suiteName: String!
+
+    override func setUp() {
+        super.setUp()
+        dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("sublight-owner-\(UUID().uuidString)")
+        suiteName = "sublight.tests.\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suiteName)!
+    }
+
+    override func tearDown() {
+        try? FileManager.default.removeItem(at: dir)
+        defaults.removePersistentDomain(forName: suiteName)
+        super.tearDown()
+    }
+
+    private func flag() -> DirtyFlag { DirtyFlag(directory: dir, defaults: defaults) }
+
+    private func write(_ text: String) throws {
+        try FileManager.default.createDirectory(
+            at: dir, withIntermediateDirectories: true)
+        try Data(text.utf8).write(to: flag().fileURL)
+    }
+
+    private func bootSeconds() -> Int64 {
+        var tv = timeval()
+        var size = MemoryLayout<timeval>.stride
+        guard sysctlbyname("kern.boottime", &tv, &size, nil, 0) == 0 else { return 0 }
+        return Int64(tv.tv_sec)
+    }
+
+    func testNoFlagMeansNoOwner() {
+        XCTAssertNil(flag().liveOwnerPID())
+    }
+
+    func testOurOwnFlagIsNotAnotherOwner() {
+        let f = flag()
+        f.set()
+        XCTAssertTrue(f.isSet)
+        XCTAssertNil(
+            f.liveOwnerPID(), "a process must not find ITSELF and refuse to run")
+    }
+
+    func testAFlagFromAPriorBootIsACrashRemnantNotAnOwner() throws {
+        // PID 1 is always alive, so only the boot stamp can rule this out —
+        // which is the point: a reboot invalidates every PID.
+        try write("\(bootSeconds() - 10_000):1\n")
+        XCTAssertNil(
+            flag().liveOwnerPID(), "a prior-boot flag is a remnant, not a live engine")
+    }
+
+    func testADeadPIDIsNotAnOwner() throws {
+        // Reap a real child so its PID is genuinely gone rather than guessed.
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/true")
+        try p.run()
+        p.waitUntilExit()
+        try write("\(bootSeconds()):\(p.processIdentifier)\n")
+        XCTAssertNil(flag().liveOwnerPID(), "an exited process holds nothing")
+    }
+
+    func testALivePIDThatIsNotSublightIsNotAnOwner() throws {
+        // PID 1 is launchd: alive, this boot, and emphatically not ours. Guards
+        // against a recycled PID reading as a concurrent engine.
+        try write("\(bootSeconds()):1\n")
+        XCTAssertNil(
+            flag().liveOwnerPID(), "only a live *Sublight* process is an owner")
+    }
+
+    func testAMalformedFlagIsNotAnOwner() throws {
+        for text in ["", "dirty", "not:a:number", "\(bootSeconds()):notapid"] {
+            try write(text)
+            XCTAssertNil(
+                flag().liveOwnerPID(), "malformed flag must not read as an owner: \(text)"
+            )
+        }
+    }
+}

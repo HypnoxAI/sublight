@@ -311,6 +311,34 @@ var signalRestore: SignalRestore?
 /// unverified API surface.
 var apiVerified = false
 
+/// HARD PRECONDITION for every command that drives the backlight for a
+/// sustained period. Two engines commanding one daemon is not a supported
+/// configuration, and — this is the part that cost three soaks — it is
+/// invisible after the fact: each process's counters are honest about their own
+/// edges and say nothing about the other's contention. A 25-minute ceiling soak
+/// recorded fourteen err-dark skips clustered just past the ON window with a
+/// menu-bar app dithering alongside it, and two with the app quit. Nothing in
+/// the first run's numbers said "there is another engine here".
+///
+/// Checked BEFORE `makeController`, because crash recovery commands the
+/// backlight and must not fire while someone else is holding it.
+func requireSoleEngine(_ command: String) {
+    guard let pid = DirtyFlag().liveOwnerPID() else { return }
+    fputs(
+        """
+        error: another Sublight engine is already driving the backlight (pid \(pid)).
+
+        Two engines commanding one daemon contend for every edge, and the
+        contention does not show up in either one's counters — it only shows up
+        as skips you will misattribute. `\(command)` refuses to start.
+
+        Quit the other one first: the menu-bar app (Sublight > Quit), or the
+        other `sublight-cli` process. Then run this again.
+
+        """, stderr)
+    exit(3)
+}
+
 @MainActor
 func makeController(args: [String]) -> BacklightController? {
     do {
@@ -850,6 +878,7 @@ case "probe":
     exit(0)
 
 case "dither-test":
+    requireSoleEngine("dither-test")
     guard let c = makeController(args: args) else { exit(2) }
     installRestoreOnSignal(c)  // forces auto-brightness off below; restore on Ctrl-C
     let floor = c.floor
@@ -997,6 +1026,7 @@ case "dither-test":
     exit(0)
 
 case "hold":
+    requireSoleEngine("hold")
     guard let dutyFlag = optionalDuty(args) else {
         fputs("error: --duty must be a finite number in (0, 1)\n", stderr)
         exit(1)
@@ -1154,6 +1184,7 @@ case "hold":
     dispatchMain()
 
 case "pair-sweep":
+    requireSoleEngine("pair-sweep")
     // DIAGNOSTIC INSTRUMENT, not a product path. Same shape as the `dither-test`
     // spike helpers above — a raw, unpaced pair loop straight at the queue-confined
     // bridge, with the engine deliberately out of the picture. One ON-window per
@@ -1271,6 +1302,7 @@ case "pair-sweep":
     exit(0)
 
 case "pulse":
+    requireSoleEngine("pulse")
     let modeArg = args.count > 1 ? args[1] : ""
     // All three sit at or below the measured stability ceiling (8.0 Hz). The
     // old "high" was 10 Hz, which is past it: on the reference machine that

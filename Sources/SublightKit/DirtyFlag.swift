@@ -100,16 +100,38 @@ public struct DirtyFlag {
     /// live Sublight process — i.e. a genuine concurrent holder, not a crash
     /// remnant. A prior-boot flag, a dead PID, or a PID now owned by an
     /// unrelated process all read as "not a live owner" so recovery proceeds.
-    private func heldByLiveOtherProcess() -> Bool {
+    private func heldByLiveOtherProcess() -> Bool { liveOwnerPID() != nil }
+
+    /// PID of a DIFFERENT, still-live Sublight process that currently holds the
+    /// flag — i.e. another engine is driving this machine's backlight right
+    /// now — or nil.
+    ///
+    /// THE PRECONDITION FOR ANY MEASUREMENT. Two engines commanding one daemon
+    /// is not a supported configuration, and it is not detectable from the
+    /// counters afterwards: each process's tally is honest about its OWN edges
+    /// and silent about the other's contention. Three 25-minute soaks were
+    /// invalidated by a menu-bar app dithering unnoticed alongside the CLI, and
+    /// the only reason it was caught at all was a stray keeper warning in the
+    /// unified log. So callers about to drive the backlight check this first
+    /// and refuse to start.
+    ///
+    /// The flag is a single slot holding the LAST writer's PID, not a registry.
+    /// That covers both directions that matter: a live app's PID is found here
+    /// before a CLI run begins, and an app starting mid-run overwrites the
+    /// slot, so a running engine's keeper then sees a PID that is not its own.
+    /// It cannot report more than one other owner, which no real configuration
+    /// has.
+    public func liveOwnerPID() -> pid_t? {
+        guard isSet else { return nil }
         let s = stamp()
         // A flag from a previous boot (or unknown boot) is never a live owner.
-        guard let boot = s.boot, boot == Self.bootSeconds() else { return false }
-        guard let pid = s.pid, pid != getpid() else { return false }
+        guard let boot = s.boot, boot == Self.bootSeconds() else { return nil }
+        guard let pid = s.pid, pid != getpid() else { return nil }
         // Alive? kill(pid,0)==0 signalable; EPERM = exists, other user.
         let alive = kill(pid, 0) == 0 || errno == EPERM
-        guard alive else { return false }
+        guard alive else { return nil }
         // Reused PID? Only a live *Sublight* process counts as an owner.
-        return Self.isSublightProcess(pid)
+        return Self.isSublightProcess(pid) ? pid : nil
     }
 
     private static func isSublightProcess(_ pid: pid_t) -> Bool {

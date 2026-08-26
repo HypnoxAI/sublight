@@ -278,6 +278,14 @@ Watch the keys at roughly **0:30**, **2:30** and **4:30**. You are looking for a
 more and then returning, repeating every one to three seconds. Steady flicker is
 the expected, healthy result — the dither is supposed to be visible.
 
+**Before either run: be the only engine.** Quit the menu-bar app and any other
+`sublight-cli` process. Two engines commanding one daemon contend for every
+edge, and the contention is invisible afterwards — each process's counters are
+honest about its own edges and silent about the other's. `hold`, `pulse`,
+`dither-test` and `pair-sweep` now refuse to start (exit 3) if another engine
+holds the marker, and a running engine logs an error if one appears mid-run.
+Three 25-minute soaks were spent before this was noticed.
+
 **2. The idle check — twenty-five minutes, hands off.**
 
 ```bash

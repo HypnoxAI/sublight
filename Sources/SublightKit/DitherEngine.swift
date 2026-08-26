@@ -147,6 +147,11 @@ public final class DitherEngine: @unchecked Sendable {
     /// Any dark envelope at any glance means the boundary moved: the new
     /// first-failure frequency minus 0.5 Hz becomes this constant.
     ///
+    /// BE THE ONLY ENGINE for both runs — quit the app and any other CLI. Two
+    /// engines on one daemon contend for every edge and neither one's counters
+    /// can see it; see `DirtyFlag.liveOwnerPID`, which the CLI checks before
+    /// starting and the keeper re-checks each tick.
+    ///
     /// The 1500 s run is not a longer version of the 300 s one. Every soak in
     /// this project's history before 2026-08-26 was <= 5 minutes, and the
     /// long-run envelopes fixed in 0.5.0 had an onset near TWENTY minutes, so
@@ -678,8 +683,7 @@ public final class DitherEngine: @unchecked Sendable {
         // half-of-HIGH ratio is what actually separates "the queue stalled and
         // took both edges with it" from "one edge ran late".
         d.lowAlsoLate = SkipDiagnostic.lowSlippedComparably(
-            lowLatenessMs: lastLowLatenessMs, highLatenessMs: highLatenessMs,
-            earlyFireGuardMs: Double(s.earlyFireGuard) / 1e6)
+            lowLatenessMs: lastLowLatenessMs, highLatenessMs: highLatenessMs)
         d.elapsedRunSeconds =
             runStartNanos.map { Double(now > $0 ? now - $0 : 0) / 1e9 } ?? 0
         d.secondsSinceKeeperTick =
@@ -956,6 +960,20 @@ public final class DitherEngine: @unchecked Sendable {
         lastKeeperTickNanos = now
 
         refreshActivityIfDue(now: now, elapsedRunSeconds: elapsed)
+
+        // A SECOND ENGINE THAT ARRIVED MID-RUN. Preconditions are checked before
+        // a run starts, but an app launched or scheduled part-way through would
+        // otherwise contend for the daemon silently, and every number from here
+        // on would be measuring two engines instead of the schedule. Say so
+        // loudly — it is the difference between a measurement and an anecdote.
+        if let other = dirtyFlag.liveOwnerPID() {
+            Log.engine.error(
+                """
+                keeper: ANOTHER Sublight engine is live (pid \(other, privacy: .public)) at \
+                t+\(elapsed, format: .fixed(precision: 1), privacy: .public) s — two engines \
+                on one daemon; counters from this run measure contention, not the schedule
+                """)
+        }
 
         diag.noteHardwareTouched()
         // READ BOTH FLAGS BEFORE RE-ASSERTING. `assertSuppression` reads each

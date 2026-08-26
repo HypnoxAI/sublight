@@ -139,7 +139,8 @@ public struct SkipDiagnostic: Equatable, Codable, Sendable {
     /// True when the LOW edge slipped COMPARABLY to the HIGH one — the signal
     /// that the whole queue stalled rather than one timer running late.
     ///
-    /// Set against half the HIGH edge's lateness, not against a fixed number.
+    /// Two conditions: LOW must be late at all by `lateThresholdMs`, AND it must
+    /// have slipped at least half as far as HIGH.
     /// The first version of this compared LOW's lateness to the 2 ms early-fire
     /// guard, which is a cycle-binning constant and not a claim about what
     /// counts as late; a soak then reported "ALSO LATE" for a LOW edge 2.13 ms
@@ -194,10 +195,29 @@ public struct SkipDiagnostic: Equatable, Codable, Sendable {
     /// takes both edges with it and they slip together, whereas one timer
     /// running late leaves the other where the anchor put it.
     public static func lowSlippedComparably(
-        lowLatenessMs: Double, highLatenessMs: Double, earlyFireGuardMs: Double
+        lowLatenessMs: Double, highLatenessMs: Double
     ) -> Bool {
-        lowLatenessMs > earlyFireGuardMs && lowLatenessMs >= 0.5 * highLatenessMs
+        lowLatenessMs >= lateThresholdMs && lowLatenessMs >= 0.5 * highLatenessMs
     }
+
+    /// WHAT COUNTS AS LATE for an edge, in ms. 5 ms, and chosen from this
+    /// project's own measurements rather than picked for roundness:
+    ///
+    ///   • punctual edges land 40-80 us past their deadline (see
+    ///     `DitherSchedule.earlyFireGuardNanos`) — 5 ms is ~60x that;
+    ///   • daemon command latency across two 25-minute soaks was p50 0.10 ms,
+    ///     p95 0.15 ms, so a command cannot push an edge here on its own;
+    ///   • the LOW edges of ordinary cycles in those soaks ran 0.5-2.6 ms late,
+    ///     so 5 ms sits about twice above the worst routine value;
+    ///   • the HIGH edges that actually tripped err-dark were 19-62 ms late,
+    ///     an order of magnitude above it.
+    ///
+    /// It is deliberately NOT `DitherSchedule.earlyFireGuard`. That constant is
+    /// 2 ms and exists to bin a firing to the right CYCLE; it is not a claim
+    /// about lateness, and using it here reported a LOW edge 2.13 ms behind a
+    /// HIGH edge 37 ms behind as "also late" — which pointed the diagnosis at a
+    /// stalled queue when the queue was fine.
+    public static let lateThresholdMs: Double = 5
 
     /// The one-line discrimination record, as it goes to the log and the report.
     public var line: String {

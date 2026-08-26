@@ -78,6 +78,17 @@ stability on.
   behind as "also late", biasing the diagnosis toward a stalled queue. It now
   requires LOW to have slipped at least half as far as HIGH.
 
+  **Only one engine may drive the backlight, and that is now enforced.**
+  `hold`, `pulse`, `dither-test` and `pair-sweep` refuse to start (exit 3) when
+  another live Sublight process holds the engagement marker, naming its PID; a
+  running engine logs an error if a second one appears mid-run. This is not
+  hygiene, it is a measurement precondition: two engines contend for every edge
+  and neither one's counters can see it, so the contention surfaces only as
+  skips that get attributed to the wrong cause. Four 25-minute soaks were spent
+  before it was caught — the menu-bar app engages SILENTLY when a CLI run has
+  already set the suppression flags, because the "flags were off" notice is the
+  only thing `start` logs and there was nothing left to correct.
+
   Note for anyone reading the counters: `low.coalesced` is expected to equal
   `high.skipped`. A skipped HIGH deliberately does not arm its LOW, so each skip
   leaves one LOW deadline unfired. That is the policy working, not lost edges.

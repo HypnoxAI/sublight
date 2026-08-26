@@ -169,9 +169,6 @@ final class EngineCountersTests: XCTestCase {
 
 final class SkipDiagnosticTests: XCTestCase {
 
-    /// The 2 ms early-fire guard, in ms, as the 8 Hz schedule sees it.
-    private let guardMs = 2.0
-
     func testTheRuleCallsAPunctualLowPunctualOnRealMeasurements() {
         // Every pair below is a real skip from the 25-minute 8 Hz ceiling soak
         // of 2026-08-26. In all fourteen the LOW edge stayed near its deadline
@@ -189,8 +186,7 @@ final class SkipDiagnosticTests: XCTestCase {
         for m in measured {
             XCTAssertFalse(
                 SkipDiagnostic.lowSlippedComparably(
-                    lowLatenessMs: m.low, highLatenessMs: m.high,
-                    earlyFireGuardMs: guardMs),
+                    lowLatenessMs: m.low, highLatenessMs: m.high),
                 "HIGH \(m.high) ms / LOW \(m.low) ms is a punctual LOW, not a stalled queue"
             )
         }
@@ -202,18 +198,32 @@ final class SkipDiagnosticTests: XCTestCase {
         for (high, low) in [(40.0, 38.0), (120.0, 110.0), (25.0, 20.0)] {
             XCTAssertTrue(
                 SkipDiagnostic.lowSlippedComparably(
-                    lowLatenessMs: low, highLatenessMs: high,
-                    earlyFireGuardMs: guardMs),
+                    lowLatenessMs: low, highLatenessMs: high),
                 "HIGH \(high) ms / LOW \(low) ms is both clocks slipping together")
         }
     }
 
-    func testTheEarlyFireGuardIsAFloorEvenWhenTheRatioWouldPass() {
-        // A tiny HIGH lateness makes almost any LOW lateness pass the ratio;
-        // the floor is what stops cycle-binning noise reading as a stall.
+    func testTheLatenessFloorHoldsEvenWhenTheRatioWouldPass() {
+        // A tiny HIGH lateness makes almost any LOW lateness pass the ratio, so
+        // the absolute floor is what stops ordinary jitter reading as a stall.
         XCTAssertFalse(
-            SkipDiagnostic.lowSlippedComparably(
-                lowLatenessMs: 1.5, highLatenessMs: 2.0, earlyFireGuardMs: guardMs))
+            SkipDiagnostic.lowSlippedComparably(lowLatenessMs: 1.5, highLatenessMs: 2.0))
+        XCTAssertFalse(
+            SkipDiagnostic.lowSlippedComparably(lowLatenessMs: 4.9, highLatenessMs: 5.0),
+            "just under the floor is not late")
+        XCTAssertTrue(
+            SkipDiagnostic.lowSlippedComparably(lowLatenessMs: 5.0, highLatenessMs: 6.0),
+            "at the floor, and comparable to HIGH, is late")
+    }
+
+    func testTheLatenessFloorIsNotTheEarlyFireGuard() {
+        // The bug this replaced: the 2 ms early-fire guard is a cycle-binning
+        // constant, and using it here called a punctual LOW edge late.
+        XCTAssertGreaterThan(
+            SkipDiagnostic.lateThresholdMs,
+            Double(DitherSchedule.earlyFireGuardNanos) / 1e6,
+            "a lateness bound must sit above the binning guard, not equal it")
+        XCTAssertEqual(SkipDiagnostic.lateThresholdMs, 5)
     }
 
     func testOnsetBucketsAreChronologicalWhenSorted() {

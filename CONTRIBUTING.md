@@ -79,6 +79,11 @@ Read the counters, not your impression of them: `scheduled` / `fired` /
 did not act on it", which is the distinction almost every backlight bug turns
 on. Per-command detail is in the unified log at debug level (below).
 
+Before any soak, make sure you are the ONLY engine: quit the menu-bar app and
+any other `sublight-cli`. The CLI enforces this at start and the engine warns if
+a second one appears mid-run, but the app can engage silently while a CLI run
+already has the suppression flags set, so check rather than assume.
+
 If you changed the frequency band or the ceiling, re-run BOTH soaks in the
 README's "Re-qualifying after a macOS update": the five-minute ceiling check
 (glances at 0:30, 2:30, 4:30) and the twenty-five-minute idle check (hands off
