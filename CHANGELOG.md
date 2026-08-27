@@ -67,16 +67,26 @@ stability on.
   timer — and both suppression flag states. A bounded trailing window of those
   records is retained, not just the most recent one: a soak producing fourteen
   skips showed that a single sample cannot tell a pattern from an outlier, and
-  the pattern was the finding. Plus `anchorResets` and a histogram of skip onset
-  times, alongside the existing `skipMaxRunLength` and
-  `longestExecutedHighGapMs`, all exposed through `status --json`.
+  the pattern was the finding. The window holds 32 records. Plus `anchorResets`
+  and a histogram of skip onset times, alongside the existing `skipMaxRunLength`
+  and `longestExecutedHighGapMs`, all exposed through `status --json`.
 
   The rule deciding whether the LOW edge "also ran late" is a pure function
   pinned by a test against real measurements. Its first version compared LOW's
   lateness to the 2 ms early-fire guard — a cycle-binning constant, not a claim
   about lateness — and so reported a LOW edge 2.13 ms behind a HIGH edge 37 ms
   behind as "also late", biasing the diagnosis toward a stalled queue. It now
-  requires LOW to have slipped at least half as far as HIGH.
+  takes **5 ms** as the lateness bound — chosen from this project's own numbers,
+  not for roundness: punctual edges land 40–80 µs past their deadline, daemon
+  command latency measured p50 0.10 ms / p95 0.15 ms across two 25-minute soaks,
+  and the LOW edges of ordinary cycles ran 0.5–2.6 ms late, while the HIGH edges
+  that actually tripped err-dark were 19–62 ms late. A second condition requires
+  LOW to have slipped at least half as far as HIGH, because a bound alone would
+  still call a LOW 6 ms late beside a HIGH 60 ms late "both timers late" — the
+  exact misreading being removed. A test pins the rule against all fourteen
+  measurements that exposed the original error, and asserts the bound is
+  strictly greater than the early-fire guard so the two cannot be conflated
+  again.
 
   **Only one engine may drive the backlight, and that is now enforced.**
   `hold`, `pulse`, `dither-test` and `pair-sweep` refuse to start (exit 3) when
@@ -88,6 +98,17 @@ stability on.
   before it was caught — the menu-bar app engages SILENTLY when a CLI run has
   already set the suppression flags, because the "flags were off" notice is the
   only thing `start` logs and there was nothing left to correct.
+
+  **The 8 Hz ceiling is unchanged**, and now measured at the timescale the
+  envelopes appear on. Re-qualified at `--freq 8 --duty 0.15` — the tightest
+  configuration shipped, an 18.75 ms ON window — across ~29.5 minutes and
+  ~14,150 HIGH edges with a single engine on the hardware: three err-dark skips,
+  all isolated, all 38–58 ms late with the LOW edge punctual, longest gap
+  between executed commands two periods rather than an envelope. The competing
+  reading, that routine jitter on this machine exceeds the ON window at duty
+  0.15, was tested against a criterion set in advance and **refuted**; no
+  minimum-ON-window floor is warranted. What produced a ~20 ms skip cluster in
+  one contended run is recorded as OPEN in `docs/COREBRIGHTNESS.md` finding 8.
 
   Note for anyone reading the counters: `low.coalesced` is expected to equal
   `high.skipped`. A skipped HIGH deliberately does not arm its LOW, so each skip

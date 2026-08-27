@@ -74,6 +74,16 @@ it is treated like one:
 - Five-minute soaks use a glance protocol (roughly 0:30 / 2:30 / 4:30). The
   failure mode recurs every one to three seconds, so a glance is sufficient and
   does not require anyone to stare at a keyboard for five minutes.
+- **Twenty-five-minute soaks** (glances at 0:30 / 10:00 / 18:00 / 22:00 / 25:00)
+  exist because a defect with a ~20 minute onset was invisible to every shorter
+  run — see finding 8. Two extra preconditions apply and both were learned the
+  hard way: the machine must be left completely alone, because idle is the
+  condition under test and the agent's own builds count as load; and there must
+  be exactly ONE live engine, verified before starting and re-checked each
+  keeper tick, because two engines on one daemon cannot be told apart afterwards
+  from either one's counters.
+- Verdicts from a run are collected AFTER it ends. Typing one mid-run is itself
+  input on the machine under test.
 - The agent never operates the camera and never simulates input.
 
 ---
@@ -365,6 +375,79 @@ The keeper was **correctly acquitted** as the cause, though for the wrong
 reason: it fired exactly five times in each of three five-minute soaks and only
 one of them skipped. It is unrelated to this defect — and, as finding 5 records,
 it turned out to be load-bearing for an entirely different reason.
+
+---
+
+### 8. The ceiling holds over the long run — and the ON-window hypothesis is refuted
+
+**Measured 2026-08-26 on Mac16,12 (M4) / macOS 26.6.1 (25G76).**
+
+Every soak in this project's history before this date was **five minutes or
+shorter**. When dark envelopes were reported at Low, Medium *and* High with an
+onset around twenty minutes, no prior "steady" verdict covered the timescale —
+so the ceiling was re-qualified at 25 minutes, at the tightest configuration the
+product ships: `--freq 8 --duty 0.15`, an **18.75 ms ON window**.
+
+**Result: the ceiling holds.** Across **~29.5 minutes and ~14,150 HIGH edges
+with a single engine on the hardware**, three err-dark skips:
+
+| Skip | HIGH late | LOW late | LOW/HIGH | Burst |
+|---|---|---|---|---|
+| 1 | 38.35 ms | 2.30 ms | 0.06 | 1 |
+| 2 | 57.85 ms | 2.18 ms | 0.04 | 1 |
+| 3 | 44.01 ms | 1.17 ms | 0.03 | 1 |
+
+Every one isolated, every one with the LOW edge punctual, longest gap between
+executed HIGH commands 236–247 ms — two periods, i.e. exactly one dropped cycle,
+never an envelope. Four glances inside solo windows, all *steady flicker*.
+
+#### The hypothesis this refutes
+
+A contended 25-minute run at the same settings recorded **14 skips, eight of
+them 19.3–21.3 ms late** — barely past the 18.75 ms threshold. That clustering
+suggested a specific and product-relevant failure: *routine scheduler jitter on
+this machine exceeds the ON window at duty 0.15*, which would make the ceiling's
+**duty** dimension unsafe regardless of frequency and would call for a minimum
+ON-window floor.
+
+The criterion set in advance was: **if HIGH lateness again clusters near 20 ms
+with LOW punctual, the ON window is below the jitter floor.** It does not. No
+solo skip lands anywhere near 20 ms — the three are 38, 44 and 58 ms, an order
+of magnitude above the threshold and consistent with occasional system-level
+stalls rather than a floor sitting under the window. **The hypothesis is refuted
+by its own criterion, and no minimum-ON-window change is warranted.**
+
+#### OPEN: what produced the ~20 ms cluster
+
+Contention with a second engine is the leading explanation and **is not
+established**. Against it: the final run's last five minutes were themselves
+contended — a second engine dithering at 3 Hz alongside ours at 8 Hz — and
+produced **zero** skips, clean by eye at both glances. So contention does not
+produce the cluster on its own, and whatever did remains unidentified.
+
+The decisive piece of evidence was never captured: **the other engine's
+frequency and duty during the 14-skip run are unknown.** It was a menu-bar app
+nobody knew was running, and by the time it was found it had been restarted.
+Contention intensity presumably scales with the other engine's command rate, and
+that number is simply missing.
+
+**Status: open.** Resolvable by deliberately running two engines at known
+settings and sweeping the second one's command rate. Nothing in the product
+depends on the answer — the ceiling is set by the solo measurement above — but
+the record should not claim contention as the cause when a 3 Hz contended tail
+falsified the simple version of that story.
+
+#### Why the measurement took five attempts
+
+Recorded because the failure mode is subtle and will recur otherwise. **Two
+engines commanding one daemon is invisible in the counters**: each process's
+tally is honest about its own edges and silent about the other's contention.
+Three 25-minute soaks were spent before anyone noticed, and the app engages
+*silently* when a CLI run has already set the suppression flags — `startLocked`
+logs only when it finds a flag needing correction, and there was nothing left to
+correct. Enforced since: the CLI refuses to start (exit 3) while another live
+engine holds the marker, and a running engine logs an error every keeper tick if
+one appears mid-run. See `DirtyFlag.liveOwnerPID`.
 
 ---
 
