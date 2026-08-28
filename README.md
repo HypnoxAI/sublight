@@ -86,7 +86,10 @@ because dimming is off:
 > matters for anyone who can see your keyboard — not only for you. The app asks
 > you to confirm you have read it the first time you enable dimming.
 
-No signed release yet, so build from source:
+No signed release yet, so build from source. Ad-hoc signing is enough for the
+Mac you built on. Sharing a binary with someone else needs Developer ID +
+notarization — see [`docs/PACKAGING.md`](docs/PACKAGING.md). That path cannot
+run on Linux and does not store Apple credentials in this repo.
 
 ```bash
 git clone https://github.com/<you>/sublight.git && cd sublight
@@ -372,7 +375,7 @@ this may not. Its key set is pinned by a test.
 
 ```
 schemaVersion                       bump = a field removed or changed meaning
-sublight   { version, build }
+sublight   { version, build, gitRevision }   gitRevision is "unknown" unless stamped
 hardware   { model, chip, appleSilicon }
 probe      { passed, macOSBuild, failures[] }     passed=false ⇒ nothing is driven
 keyboard   { id, reportedLevel, autoBrightness, idleDimmed, assumedFloor }
@@ -413,8 +416,12 @@ uses a **DCO**, not a CLA: sign off commits with `git commit -s`.
 
 Bug reports about hardware behaviour are far more useful with diagnostics
 attached: **Settings → Diagnostics → Copy** gets everything relevant in one
-block (and deliberately excludes your coordinates). For anything involving the
-private API, add `sublight-cli dump` and `sublight-cli sig` output too.
+block, shaped for the Hardware report issue template — model, macOS, measured
+floor, stability ceiling, git SHA of the running binary, engine age, live skip
+counters, and last skip (or `none`). Coordinates are deliberately excluded.
+For anything involving the private API, add `sublight-cli dump` and
+`sublight-cli sig` output too. `sublight-cli status --json` cannot see the
+menu-bar app's engine; Copy can, because it runs inside that process.
 
 Deliberate non-goals: any network call, analytics or telemetry (which also rules
 out an auto-updater), Intel support, per-key lighting, the Mac App Store, and any

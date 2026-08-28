@@ -20,6 +20,8 @@
 //  finding: reporting a number you did not measure is worse than reporting
 //  nothing.
 //
+//  Modified 2026-08-28: Build.gitRevision (bundle-time SHA, or "unknown").
+//
 //  Licensed under the Apache License 2.0 — see LICENSE.
 //
 
@@ -34,9 +36,13 @@ public struct StatusReport: Codable, Equatable, Sendable {
     public struct Build: Codable, Equatable, Sendable {
         public var version: String
         public var build: String
-        public init(version: String, build: String) {
+        /// Bundle-time git revision, or `"unknown"` when the binary was not
+        /// stamped. Optional addition: does not bump `schemaVersion`.
+        public var gitRevision: String
+        public init(version: String, build: String, gitRevision: String = "unknown") {
             self.version = version
             self.build = build
+            self.gitRevision = gitRevision
         }
     }
 

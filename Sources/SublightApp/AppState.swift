@@ -31,6 +31,9 @@
 //  user can still override manually between transitions. In Simple it toggles
 //  the 8 Hz dim; in Advanced it also applies `scheduleFrequency`.
 //
+//  Modified 2026-08-28: Diagnostics Copy reads the live engine (SHA, age,
+//  skip counters, last skip) and is shaped for the Hardware report template.
+//
 //  Licensed under the Apache License 2.0 — see LICENSE.
 //
 
@@ -480,7 +483,9 @@ final class AppState: ObservableObject {
                 frequencyHz: effectiveFrequency))
     }
 
-    /// A plain-text report for bug reports and support threads.
+    /// A plain-text report for bug reports, hardware reports, and support
+    /// threads. Built from the LIVE engine in this process — not from a new
+    /// controller, which is why `sublight-cli status` cannot substitute.
     ///
     /// PRIVACY: deliberately reports the chosen *city* — or merely the fact
     /// that custom coordinates are set — never the coordinates themselves.
@@ -489,11 +494,19 @@ final class AppState: ObservableObject {
     /// home to within about ten metres. Nothing here identifies a person or a
     /// machine.
     var diagnosticsReport: String {
+        DiagnosticsCopy.text(diagnosticsSnapshot)
+    }
+
+    /// Snapshot of Diagnostics inputs, taken NOW from this process's engine.
+    var diagnosticsSnapshot: DiagnosticsSnapshot {
         let os = ProcessInfo.processInfo.operatingSystemVersion
         let info = Bundle.main.infoDictionary
         let version =
             (info?["CFBundleShortVersionString"] as? String) ?? SublightVersion.current
-        let build = (info?["CFBundleVersion"] as? String) ?? "?"
+        let build = (info?["CFBundleVersion"] as? String) ?? SublightVersion.build
+        let macOS =
+            "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion) "
+            + "(\(ProcessInfo.processInfo.operatingSystemVersionString))"
 
         let locationDescription: String
         if let city = selectedCity {
@@ -504,56 +517,56 @@ final class AppState: ObservableObject {
             locationDescription = "not set"
         }
 
-        var lines: [String] = [
-            "Sublight \(version) (\(build))",
-            "macOS \(os.majorVersion).\(os.minorVersion).\(os.patchVersion)",
-            "Hardware: \(hardware.summary)",
-            "Apple Silicon: \(hardware.isAppleSilicon ? "yes" : "no")",
-            "",
-            "Engine: \(available ? "available" : "UNAVAILABLE")",
-        ]
-        if !statusText.isEmpty {
-            lines.append("Engine error: \(statusText)")
-        }
-        if let c = controller {
-            lines.append("Keyboard ID: \(c.keyboardID)")
-            lines.append(
-                String(
-                    format: "Floor: %.4f%@", c.floor,
-                    isCalibrated ? " (calibrated)" : " (default — not calibrated)"))
-        }
-
-        lines += [
-            "",
-            "Mode: \(advancedMode ? "advanced" : "simple")",
-            "Dimming: \(isEnabled ? "on" : "off")\(systemSuspended ? " (suspended by system)" : "")",
-            "Engine: \(engineState.isRunning ? "running" : "stopped")",
-            String(format: "Effective frequency: %.1f Hz", effectiveFrequency),
-            String(format: "Brightness: %.0f%%", brightness * 100),
-            "Calibrated: \(isCalibrated ? String(format: "yes, %.1f Hz", calibratedFrequency ?? 0) : "no")",
-            "",
-            "Schedule: \(scheduleEnabled ? scheduleMode.label : "off")",
-        ]
+        var solarLine: String? = nil
+        var locationLine: String? = nil
         if scheduleEnabled, scheduleMode == .solar {
-            lines.append("Location: \(locationDescription)")
+            locationLine = locationDescription
             if let t = solarTimes {
                 switch t.condition {
                 case .normal:
                     let f = DateFormatter(); f.timeStyle = .short; f.dateStyle = .none
-                    lines.append(
-                        "Sunset/sunrise: \(t.sunset.map(f.string(from:)) ?? "—") / \(t.sunrise.map(f.string(from:)) ?? "—")"
-                    )
-                case .polarDay: lines.append("Solar: polar day")
-                case .polarNight: lines.append("Solar: polar night")
+                    solarLine =
+                        "Sunset/sunrise: "
+                        + "\(t.sunset.map(f.string(from:)) ?? "—") / "
+                        + "\(t.sunrise.map(f.string(from:)) ?? "—")"
+                case .polarDay: solarLine = "Solar: polar day"
+                case .polarNight: solarLine = "Solar: polar night"
                 }
             }
         }
 
-        lines += [
-            "Shortcut: \(hotKey == .off ? "off" : hotKey.label)\(hotKeyConflict ? " (CONFLICT)" : "")",
-            "Launch at login: \(launchAtLogin ? "on" : "off")",
-        ]
-        return lines.joined(separator: "\n")
+        let engine = controller?.engine
+        return DiagnosticsSnapshot(
+            version: version,
+            build: build,
+            gitRevision: SublightVersion.gitRevision,
+            macOS: macOS,
+            modelIdentifier: hardware.modelIdentifier,
+            hardwareSummary: hardware.summary,
+            appleSilicon: hardware.isAppleSilicon,
+            measuredFloor: controller?.floor ?? 0.0625,
+            floorCalibrated: isCalibrated,
+            stabilityCeilingHz: DitherEngine.maxStableFrequencyHz,
+            engineAvailable: available,
+            engineError: statusText,
+            keyboardID: controller?.keyboardID,
+            sessionElapsedSeconds: engine?.sessionElapsedSeconds ?? 0,
+            ditherRunElapsedSeconds: engine?.runElapsedSeconds,
+            counters: engine?.counters ?? EngineCounters(),
+            advancedMode: advancedMode,
+            dimmingOn: isEnabled,
+            systemSuspended: systemSuspended,
+            engineRunning: engineState.isRunning,
+            effectiveFrequencyHz: effectiveFrequency,
+            brightness: brightness,
+            calibratedFrequencyHz: calibratedFrequency,
+            scheduleDescription: scheduleEnabled ? scheduleMode.label : "off",
+            locationDescription: locationLine,
+            solarLine: solarLine,
+            shortcut:
+                "\(hotKey == .off ? "off" : hotKey.label)"
+                + (hotKeyConflict ? " (CONFLICT)" : ""),
+            launchAtLogin: launchAtLogin)
     }
 
     func markOnboardingSeen() {

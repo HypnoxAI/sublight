@@ -8,6 +8,11 @@ body:
         Every model behaves a little differently — floor, coalescing ceiling,
         usable band. These reports become the README compatibility table and
         eventually better shipped defaults. Two minutes, genuinely useful.
+
+        Settings → Diagnostics → Copy is paste-ready for the fields below
+        (model, macOS, floor, ceiling, plus git revision and live skip
+        counters). Fill in "works" yourself — that is a visual observation.
+        Coordinates are never included.
   - type: input
     id: model
     attributes:
@@ -25,7 +30,7 @@ body:
     id: floor
     attributes:
       label: Measured floor
-      description: "Settings → Diagnostics after calibrating (e.g. 0.0625)"
+      description: "Settings → Diagnostics after calibrating (e.g. 0.0625). Diagnostics → Copy includes this."
   - type: input
     id: hz
     attributes:

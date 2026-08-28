@@ -93,6 +93,8 @@
 //  The bridge adds an XPC interval around the command itself, so edge-to-
 //  command and command duration are separable in one Instruments trace.
 //
+//  Modified 2026-08-28: sessionElapsedSeconds and runElapsedSeconds for Diagnostics.
+//
 //  Licensed under the Apache License 2.0 — see LICENSE.
 //
 
@@ -258,6 +260,13 @@ public final class DitherEngine: @unchecked Sendable {
     /// actor) to the engine queue and invoked from there.
     public var onStateChange: (@Sendable (EngineState) -> Void)?
 
+    /// Uptime at which THIS engine instance was created. Engine age in
+    /// Diagnostics is measured from here, not from process launch and not
+    /// from the current dither run: a menu-bar process that has been up for
+    /// hours with dimming currently off still has to be distinguishable from
+    /// one that was just rebuilt. Immutable, so it is not queue-confined.
+    private let createdAtNanos = DispatchTime.now().uptimeNanoseconds
+
     // MARK: Init
 
     /// - Parameters:
@@ -318,8 +327,27 @@ public final class DitherEngine: @unchecked Sendable {
 
     /// Scheduled / fired / executed / skipped edge counts and daemon command
     /// latency for this process. Safe from any thread. Exposed by
-    /// `sublight-cli status`, `hold` and `pair-sweep`.
+    /// `sublight-cli status`, `hold` and `pair-sweep`, and by the app's
+    /// Diagnostics Copy — which is the one that can actually see a LIVE
+    /// menu-bar engine. The CLI constructs a new controller, so its counters
+    /// stay empty by construction.
     public var counters: EngineCounters { diag.snapshot() }
+
+    /// Seconds since this engine instance was created. Any thread.
+    public var sessionElapsedSeconds: Double {
+        let now = DispatchTime.now().uptimeNanoseconds
+        return Double(now > createdAtNanos ? now - createdAtNanos : 0) / 1e9
+    }
+
+    /// Seconds the current dither run has been going, or nil when stopped.
+    /// Hops to the engine queue: `runStartNanos` is confined there.
+    public var runElapsedSeconds: Double? {
+        EngineQueue.run {
+            guard let start = runStartNanos else { return nil }
+            let now = DispatchTime.now().uptimeNanoseconds
+            return Double(now > start ? now - start : 0) / 1e9
+        }
+    }
 
     /// Zero the tally — used to bracket one measurement run.
     public func resetCounters() { diag.reset() }

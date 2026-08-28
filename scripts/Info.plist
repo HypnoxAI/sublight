@@ -21,7 +21,13 @@
 	<key>CFBundleShortVersionString</key>
 	<string>0.5.0</string>
 	<key>CFBundleVersion</key>
-	<string>5</string>
+	<string>6</string>
+	<!-- Stamped at bundle time by scripts/make_app.sh from `git rev-parse HEAD`.
+	     "unknown" is the fallback for a hand-assembled bundle. Never a
+	     committed SHA — that would make two binaries from different commits
+	     report the same identity. -->
+	<key>SublightGitRevision</key>
+	<string>unknown</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>LSUIElement</key>

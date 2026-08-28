@@ -7,6 +7,8 @@
 //  output can be reworded freely; this cannot. These tests pin the key set, so
 //  a rename or a dropped field fails here rather than silently downstream.
 //
+//  Modified 2026-08-28: Build.gitRevision is part of the pinned key set.
+//
 //  Licensed under the Apache License 2.0 — see LICENSE.
 //
 
@@ -40,7 +42,8 @@ final class StatusReportTests: XCTestCase {
         let marker = ConsentMarker(directory: dir)
         marker.record()
         return StatusReport(
-            sublight: .init(version: "0.4.0", build: "4"),
+            sublight: .init(
+                version: "0.4.0", build: "4", gitRevision: "abc123def456"),
             hardware: .init(model: "Mac16,12", chip: "Apple M4", appleSilicon: true),
             probe: .init(
                 passed: true, macOSBuild: "Version 26.6.1 (Build 25G76)", failures: []),
@@ -100,6 +103,11 @@ final class StatusReportTests: XCTestCase {
     func testSchemaVersionIsOne() throws {
         XCTAssertEqual(StatusReport.currentSchemaVersion, 1)
         XCTAssertEqual(try object(fullReport())["schemaVersion"] as? Int, 1)
+        let emptySub = try XCTUnwrap(
+            try object(emptyReport())["sublight"] as? [String: Any])
+        XCTAssertEqual(
+            emptySub["gitRevision"] as? String, "unknown",
+            "an unstamped binary reports unknown, not a missing key")
     }
 
     func testTopLevelKeySetIsExactlyThis() throws {
@@ -118,7 +126,7 @@ final class StatusReportTests: XCTestCase {
         func keys(_ name: String) -> Set<String> {
             Set((o[name] as? [String: Any] ?? [:]).keys)
         }
-        XCTAssertEqual(keys("sublight"), ["version", "build"])
+        XCTAssertEqual(keys("sublight"), ["version", "build", "gitRevision"])
         XCTAssertEqual(keys("hardware"), ["model", "chip", "appleSilicon"])
         XCTAssertEqual(keys("probe"), ["passed", "macOSBuild", "failures"])
         XCTAssertEqual(

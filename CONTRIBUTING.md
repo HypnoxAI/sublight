@@ -41,6 +41,9 @@ swift build                                    # both products, debug
 swift build -c release --product sublight-cli  # the CLI + probe harness
 swift build -c release --product SublightApp   # the app binary
 ./scripts/make_app.sh                          # assemble + ad-hoc sign build/Sublight.app
+./scripts/make_dmg.sh                          # wrap that .app into a DMG (macOS)
+# Developer ID + notarize: see docs/PACKAGING.md — identity is supplied by you,
+# never stored in this repo. The cloud VM cannot codesign.
 swift test                                     # the pure-logic suite
 ```
 
@@ -77,7 +80,10 @@ sublight-cli status          # counters from the last recorded run
 Read the counters, not your impression of them: `scheduled` / `fired` /
 `executed` / `skipped` separate "the engine did not send it" from "the daemon
 did not act on it", which is the distinction almost every backlight bug turns
-on. Per-command detail is in the unified log at debug level (below).
+on. In the **running menu-bar app**, Settings → Diagnostics → Copy is the
+live tally (including last skip, or `none`). `sublight-cli status` constructs
+a new controller and will not show the app's counters. Per-command detail is
+in the unified log at debug level (below).
 
 Before any soak, make sure you are the ONLY engine: quit the menu-bar app and
 any other `sublight-cli`. The CLI enforces this at start and the engine warns if

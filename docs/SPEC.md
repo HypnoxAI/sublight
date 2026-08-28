@@ -349,9 +349,9 @@ sublight/
 ├── Tests/SublightKitTests/                  the pure logic: schedule, solar, dither
 │                                            arithmetic, dirty flag, consent, counters,
 │                                            glyph geometry, API-surface decisions
-├── scripts/  (Info.plist, make_app.sh)      bundle + ad-hoc sign
+├── scripts/  (Info.plist, make_app.sh, make_dmg.sh)  bundle + ad-hoc sign; DMG / Developer ID
 ├── SAFETY.md, DISCLAIMER                    what the flicker is, and who must not use it
-└── docs/  (SPEC, ROADMAP, COREBRIGHTNESS, APPSTORE_AND_HEALTH)
+└── docs/  (SPEC, ROADMAP, COREBRIGHTNESS, APPSTORE_AND_HEALTH, PACKAGING)
 ```
 
 ### Menu bar states
@@ -473,12 +473,20 @@ hardware, and calibration is the answer to it.
 
 ## 10. Distribution
 
-Ad-hoc signing (`make_app.sh`) suffices for the build machine. Sharing binaries
-needs Developer ID + Hardened Runtime + notarization (a paid $99/yr account; a
-free team can sign locally but not notarize). Notarization is a malware scan,
-not an API review, so private-API use is not a barrier — but the Mac App Store
-is permanently off the table for the same private-API reason. Primary
-distribution is source: `git clone && swift build`.
+Ad-hoc signing (`scripts/make_app.sh`) suffices for the build machine. Sharing
+binaries needs Developer ID + Hardened Runtime + notarization (a paid $99/yr
+account; a free team can sign locally but not notarize). The operator recipe —
+identity from `SUBLIGHT_SIGN_IDENTITY` or `security find-identity`, notarytool
+keychain profile, `scripts/make_dmg.sh --sign --notarize` — is in
+[`PACKAGING.md`](PACKAGING.md). Nothing in the repo holds a certificate or
+password. Notarization is a malware scan, not an API review, so private-API use
+is not a barrier — but the Mac App Store is permanently off the table for the
+same private-API reason. Primary distribution is source: `git clone && swift
+build`.
+
+`make_app.sh` stamps `SublightGitRevision` from `git rev-parse HEAD` into the
+bundle at pack time so Settings → Diagnostics can tell HEAD from yesterday's
+binary. The SHA is not a constant in source.
 
 ## 11. Roadmap
 
@@ -505,7 +513,9 @@ manually-entered location — deliberately *not* CoreLocation, which would add a
 permission prompt and may resolve position over the network, breaking the
 no-network rule below.
 
-**Next:** signing, notarization and a DMG.
+**Next:** screenshots, Control Center jitter mitigations. Developer ID +
+notarization + DMG is documented (`docs/PACKAGING.md`); running it needs a Mac
+and an operator-supplied signing identity.
 
 **Parked:** yield-to-manual-control. The original design released the hold when
 the user pressed a keyboard-brightness key — but the reference machine (M4

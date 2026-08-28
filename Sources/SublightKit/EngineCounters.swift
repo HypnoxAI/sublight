@@ -33,6 +33,8 @@
 //  (count, sum and max stay exact over all time), so a process that dithers for
 //  a week costs the same memory as one that dithers for a minute.
 //
+//  Modified 2026-08-28: live skipCurrentRunLength on snapshot; last skip "none".
+//
 //  Licensed under the Apache License 2.0 — see LICENSE.
 //
 
@@ -247,6 +249,11 @@ public struct EngineCounters: Equatable, Codable, Sendable {
     /// Longest run of CONSECUTIVE skipped HIGH edges. A dark envelope of N
     /// cycles shows up here as N; scattered singles show up as 1.
     public var skipMaxRunLength: UInt64 = 0
+    /// Current consecutive skipped HIGH edges. 0 after an executed HIGH, or
+    /// when the engine is stopped. LIVE-ONLY: filled by `snapshot()`, not
+    /// persisted — a decoded `diagnostics.json` from a finished run is 0 by
+    /// construction, which is the honest value once the run has ended.
+    public var skipCurrentRunLength: UInt64 = 0
 
     /// Longest interval between two consecutive EXECUTED HIGH commands, ms.
     /// With no skips and no coalescing this equals the nominal period.
@@ -336,9 +343,14 @@ public struct EngineCounters: Equatable, Codable, Sendable {
             indent
                 + String(
                     format:
-                        "err-dark skips: %llu   max lateness %.2f ms   threshold at last skip %.2f ms   longest burst %llu cycles",
-                    high.skipped, skipMaxLatenessMs, skipLastThresholdMs, skipMaxRunLength
+                        "err-dark skips: %llu   max lateness %.2f ms   "
+                        + "threshold at last skip %.2f ms   longest burst %llu cycles   "
+                        + "consecutive %llu",
+                    high.skipped, skipMaxLatenessMs, skipLastThresholdMs,
+                    skipMaxRunLength, skipCurrentRunLength
                 ))
+        out.append(
+            indent + "last skip: " + (lastSkip.map(\.line) ?? "none"))
         out.append(
             indent
                 + String(
@@ -433,6 +445,7 @@ public final class EngineDiagnostics: @unchecked Sendable {
         var c = counters
         c.high.scheduled = highBase &+ highInRun
         c.low.scheduled = lowBase &+ lowInRun
+        c.skipCurrentRunLength = skipRun
         return c
     }
 

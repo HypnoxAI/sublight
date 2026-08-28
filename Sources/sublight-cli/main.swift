@@ -680,8 +680,12 @@ case "status":
         let probe = validateAPISurface()
         let hw = HardwareInfo.current
         let report = StatusReport(
+            // gitRevision is "unknown" for an unstamped CLI; the app stamps
+            // it into Info.plist at bundle time. This process cannot read the
+            // menu-bar app's counters — Diagnostics Copy can.
             sublight: .init(
-                version: SublightVersion.current, build: SublightVersion.build),
+                version: SublightVersion.current, build: SublightVersion.build,
+                gitRevision: SublightVersion.gitRevision),
             hardware: .init(
                 model: hw.modelIdentifier, chip: hw.chip, appleSilicon: hw.isAppleSilicon),
             probe: .init(

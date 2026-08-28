@@ -73,7 +73,10 @@ run."** Sublight can be freely and legitimately distributed outside the store.
 
 - Sign with a **Developer ID Application** certificate, enable the **Hardened
   Runtime**, **notarize** (`xcrun notarytool submit --wait`), and **staple**
-  (`xcrun stapler`). Distribute as a DMG / zip / GitHub release.
+  (`xcrun stapler`). Distribute as a DMG / zip / GitHub release. The operator
+  recipe — identity from the environment or `security find-identity`, never a
+  cert in the repo — is [`PACKAGING.md`](PACKAGING.md) and
+  `scripts/make_dmg.sh`.
 - **Notarization is an automated malware & security scan, not a guideline
   review.** It checks code signing, the hardened runtime, and for known
   malware — it does **not** enforce Guideline 2.5.1. **Private-API use does not
