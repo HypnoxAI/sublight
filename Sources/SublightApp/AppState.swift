@@ -504,7 +504,8 @@ final class AppState: ObservableObject {
         let version =
             (info?["CFBundleShortVersionString"] as? String) ?? SublightVersion.current
         let build = (info?["CFBundleVersion"] as? String) ?? SublightVersion.build
-        let macOS = "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion) "
+        let macOS =
+            "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion) "
             + "(\(ProcessInfo.processInfo.operatingSystemVersionString))"
 
         let locationDescription: String
