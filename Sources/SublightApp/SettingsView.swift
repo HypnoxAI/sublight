@@ -8,10 +8,14 @@
 //  the popover — login item, reset, the safety acknowledgment, and About.
 //  Calibration and the global shortcut land here in later build parts.
 //
+//  Modified 2026-08-28: Diagnostics Copy is live and hardware-report shaped;
+//  About shows build number (and short git SHA when stamped).
+//
 //  Licensed under the Apache License 2.0 — see LICENSE.
 //
 
 import AppKit
+import Combine
 import SublightKit
 import SwiftUI
 
@@ -275,17 +279,27 @@ private struct SafetyTab: View {
 /// Sublight drives an undocumented framework across hardware that behaves
 /// differently machine to machine, so "it doesn't work" is close to useless as
 /// a bug report. This exists so the answer to "what's your setup?" is one
-/// button, and so the maintainers see the floor, the effective frequency and
-/// the calibration state without a back-and-forth.
+/// button, and so the maintainers see the floor, the effective frequency,
+/// the live skip counters and the build identity without a back-and-forth.
+/// Copy is shaped for the Hardware report GitHub issue template.
+///
+/// Modified 2026-08-28: live engine fields; hardware-report-shaped Copy.
 private struct DiagnosticsTab: View {
     @EnvironmentObject var state: AppState
     @State private var copied = false
+    /// Forces a re-read of the live engine so the on-screen block is not a
+    /// snapshot from when the tab first appeared.
+    @State private var tick = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Include this when reporting a problem.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
+            Text(
+                "Include this when reporting a problem. Copy is paste-ready for "
+                    + "a Hardware report issue. Coordinates are never included."
+            )
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
 
             ScrollView {
                 Text(state.diagnosticsReport)
@@ -293,6 +307,7 @@ private struct DiagnosticsTab: View {
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(10)
+                    .id(tick)
             }
             .background(Color(nsColor: .textBackgroundColor))
             .clipShape(RoundedRectangle(cornerRadius: 7))
@@ -318,6 +333,9 @@ private struct DiagnosticsTab: View {
             }
         }
         .padding(18)
+        .onReceive(Timer.publish(every: 1, on: .main, in: .common).autoconnect()) { _ in
+            tick += 1
+        }
     }
 }
 
@@ -326,9 +344,18 @@ private struct DiagnosticsTab: View {
 private struct AboutTab: View {
     @EnvironmentObject var state: AppState
 
-    private static let version: String =
-        (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String)
-        ?? SublightVersion.current
+    private var versionLine: String {
+        let info = Bundle.main.infoDictionary
+        let version =
+            (info?["CFBundleShortVersionString"] as? String) ?? SublightVersion.current
+        let build = (info?["CFBundleVersion"] as? String) ?? SublightVersion.build
+        var s = "Version \(version) (\(build))"
+        let rev = SublightVersion.gitRevision
+        if rev != "unknown" {
+            s += " · \(rev.prefix(12))"
+        }
+        return s
+    }
 
     var body: some View {
         VStack(spacing: 6) {
@@ -342,7 +369,7 @@ private struct AboutTab: View {
             .accessibilityHidden(true)
 
             Text("Sublight").font(.title2).bold()
-            Text("Version \(Self.version)")
+            Text(versionLine)
                 .font(.caption).foregroundStyle(.secondary).monospacedDigit()
 
             Text("Dims the built-in keyboard backlight below the macOS minimum.")

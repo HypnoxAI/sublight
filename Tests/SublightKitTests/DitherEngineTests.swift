@@ -4,6 +4,8 @@
 //  DitherEngineTests.swift — phase logic and restore guarantees through the
 //  BacklightCommanding seam. No hardware: a recorder stands in for the bridge.
 //
+//  Modified 2026-08-28: runElapsedSeconds / sessionElapsedSeconds.
+//
 //  Licensed under the Apache License 2.0 — see LICENSE.
 //
 
@@ -123,6 +125,20 @@ final class DitherEngineTests: XCTestCase {
         wait(0.15)
         XCTAssertEqual(recorder.commands.last, .restore(0.4))
         XCTAssertFalse(engine.isRunning)
+    }
+
+    func testRunElapsedIsNilWhenStoppedAndAdvancesWhileRunning() {
+        XCTAssertNil(engine.runElapsedSeconds, "no dither run has started")
+        XCTAssertGreaterThan(engine.sessionElapsedSeconds, 0)
+        engine.start(frequencyHz: 20, duty: 0.5, rampFrom: nil, rampDuration: 0)
+        wait(0.2)
+        let running = engine.runElapsedSeconds
+        XCTAssertNotNil(running)
+        XCTAssertGreaterThan(running ?? 0, 0.05)
+        engine.stopAndRestore(ramp: 0)
+        wait(0.1)
+        XCTAssertNil(engine.runElapsedSeconds, "restore clears the run clock")
+        XCTAssertGreaterThan(engine.sessionElapsedSeconds, running ?? 0)
     }
 
     private func wait(_ seconds: TimeInterval) {

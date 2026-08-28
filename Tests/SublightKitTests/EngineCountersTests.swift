@@ -5,6 +5,8 @@
 //  percentiles or the scheduled/fired bookkeeping lie, every diagnosis built
 //  on them is wrong, so the arithmetic is pinned here.
 //
+//  Modified 2026-08-28: skipCurrentRunLength; last skip "none" in the report.
+//
 //  Licensed under the Apache License 2.0 — see LICENSE.
 //
 
@@ -84,6 +86,7 @@ final class EngineCountersTests: XCTestCase {
         for needle in [
             "HIGH", "LOW", "scheduled", "fired", "executed", "skipped", "coalesced",
             "err-dark skips: 13", "longest burst 5", "583.4", "brightness=527",
+            "consecutive 0", "last skip: none",
         ] {
             XCTAssertTrue(r.contains(needle), "report is missing \(needle):\n\(r)")
         }
@@ -110,6 +113,9 @@ final class EngineCountersTests: XCTestCase {
         XCTAssertEqual(c.high.coalesced, 0)
         XCTAssertEqual(
             c.skipMaxRunLength, 3, "three consecutive skips is a 3-cycle dark envelope")
+        XCTAssertEqual(
+            c.skipCurrentRunLength, 0,
+            "an executed HIGH clears the current burst")
         XCTAssertEqual(c.skipMaxLatenessMs, 23, accuracy: 1e-9)
         XCTAssertEqual(c.skipLastThresholdMs, 16.67, accuracy: 1e-9)
         XCTAssertEqual(c.longestExecutedHighGapMs, 500, accuracy: 1e-6)
@@ -126,6 +132,7 @@ final class EngineCountersTests: XCTestCase {
         d.noteHighExecuted(atNanos: 1)
         d.noteHighSkipped(latenessMs: 20, thresholdMs: 16)
         XCTAssertEqual(d.snapshot().skipMaxRunLength, 4)
+        XCTAssertEqual(d.snapshot().skipCurrentRunLength, 1)
     }
 
     func testScheduledSurvivesAnAnchorResetByFoldingTheRunIntoABase() {

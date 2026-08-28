@@ -10,7 +10,30 @@ stability on.
 
 ## [Unreleased]
 
+Build identity is now **0.5.0 (6)** so a rebuilt app is distinguishable from
+the 0.5.0 (5) binary without reading a git SHA.
+
 ### Added
+- **Live Diagnostics identity.** Settings → Diagnostics (and Diagnostics →
+  Copy) now reads the running menu-bar engine, not a fresh controller:
+  bundle-time git SHA (`SublightGitRevision`, stamped by `make_app.sh` from
+  `git rev-parse HEAD` — never hardcoded in source), engine session age,
+  current dither-run elapsed (or "not running"), live HIGH/LOW skip counters
+  with scheduled/fired/executed, `skipMaxRunLength`, the consecutive err-dark
+  run, and last skip (when / HIGH / late ms / threshold) or explicit `none`.
+  Copy is shaped for the Hardware report GitHub issue template (model, macOS,
+  measured floor, stability ceiling, works left as a fill-in). No coordinates,
+  no emoji. About shows `0.5.0 (6)` and a short SHA when stamped.
+  `status --json` gains `sublight.gitRevision` (optional; `"unknown"` for an
+  unstamped CLI). The CLI still cannot see the menu-bar process's counters —
+  that gap is why Diagnostics had to grow.
+- **DMG + Developer ID + notarize packaging scripts.** `scripts/make_dmg.sh`
+  wraps `make_app.sh` output into a UDZO DMG. `--sign` / `--notarize` use an
+  identity the operator supplies (`SUBLIGHT_SIGN_IDENTITY` or
+  `security find-identity`) and a notarytool keychain profile
+  (`SUBLIGHT_NOTARY_PROFILE`). No certificate or password lives in the repo.
+  Ad-hoc signing remains the local path. Linux hosts exit 1 with a pointer at
+  [`docs/PACKAGING.md`](docs/PACKAGING.md).
 - **`sublight-cli status --json`**, a versioned schema rather than scraped text:
   version, hardware, probe result, keyboard state, engine mode/frequency/duty,
   consent, counters, and the last recorded run. Unknown values are `null`, never
@@ -163,7 +186,9 @@ stability on.
 
 ### Planned
 
-- Developer ID signing, notarization, and a DMG.
+- Developer ID signing, notarization, and a DMG — **scripts and docs landed**;
+  an operator with a paid Apple Developer account runs them on a Mac. See
+  [`docs/PACKAGING.md`](docs/PACKAGING.md).
 
 ## [0.4.0] — 2026-08-23
 

@@ -11,7 +11,10 @@
 # Ad-hoc signing is fine for the machine you built on. To move the app to
 # another Mac without Gatekeeper friction, sign with a Developer ID
 # certificate and notarize (paid Apple Developer account required) — see
-# docs/SPEC.md §10.
+# docs/PACKAGING.md. This script never embeds a certificate or password.
+#
+# Git identity is stamped into Info.plist (SublightGitRevision) from
+# `git rev-parse HEAD` at bundle time. Do not put a SHA in source.
 #
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -42,7 +45,23 @@ fi
   "${APP}/Contents/Info.plist" >/dev/null
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILDNUM" \
   "${APP}/Contents/Info.plist" >/dev/null
-echo "==> version ${MARKETING} (${BUILDNUM})"
+
+# Git identity at BUNDLE time, never a SHA in source. A rebuilt app must be
+# distinguishable from yesterday's binary; marketing version alone is not.
+GITREV="unknown"
+if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  GITREV=$(git rev-parse HEAD)
+  if ! git diff --quiet --ignore-submodules HEAD 2>/dev/null \
+    || ! git diff --cached --quiet --ignore-submodules 2>/dev/null; then
+    GITREV="${GITREV}-dirty"
+  fi
+fi
+if ! /usr/libexec/PlistBuddy -c "Set :SublightGitRevision $GITREV" \
+  "${APP}/Contents/Info.plist" >/dev/null 2>&1; then
+  /usr/libexec/PlistBuddy -c "Add :SublightGitRevision string $GITREV" \
+    "${APP}/Contents/Info.plist" >/dev/null
+fi
+echo "==> version ${MARKETING} (${BUILDNUM})  git ${GITREV}"
 
 echo "==> icons"
 # The .icns is a GENERATED artifact built from the committed 1024px PNG master
